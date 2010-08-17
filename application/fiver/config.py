@@ -1,0 +1,16 @@
+BOARDWIDTH=350
+BOARDHEIGHT=349
+BOARDX0=13
+BOARDY0=13
+BOARDXL=23
+BOARDYL=23
+XCOUNTS=15
+YCOUNTS=15
+MIDX=7
+MIDY=7
+
+BOARDIMAGE='res/Board.bmp'
+BLACKCHESSIMAGE='res/Black.xpm'
+WHITECHESSIMAGE='res/White.xpm'
+none,black,white,forbidden=0,1,2,3
+first_party=black

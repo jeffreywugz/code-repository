@@ -1,0 +1,7 @@
+#define HOG_DEVICE   hog.node
+#define SUPPORT_KERNEL_MODULE   1
+#define SUPPORT_STATIC_REMAP   0
+#define SUPPORT_DYNAMIC_REMAP   1
+#define SUPPORT_PFMON   0
+#define SUPPORT_OPENMP   0
+#define USER_TIME_ONLY   0

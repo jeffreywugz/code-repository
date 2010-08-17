@@ -1,0 +1,3 @@
+corpus_file=corpus/docword.kos.txt
+n_cluster=30
+

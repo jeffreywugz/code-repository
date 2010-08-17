@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+    xmlns:s="library://ns.adobe.com/flex/spark" 
+    xmlns:mx="library://ns.adobe.com/flex/mx"
+    applicationComplete="initApp();">
+    <fx:Script>
+        <![CDATA[
+          import mx.utils.ObjectProxy;
+          
+          [Bindable]
+          public var person:ObjectProxy = new ObjectProxy({});
+          
+          private function initApp():void {
+                  setInterval(updatePerson, 1000);
+          }
+
+          public function randomChoice(list:Array):Object {
+                  return list[Math.floor(Math.random()*list.length)]
+          }
+          
+          private function updatePerson(): void {
+                  person.name = randomChoice(['xxx', 'yyy', 'zzz']);
+                  person.mood = randomChoice(['good', 'bad', 'normal']);
+          }
+          ]]>
+    </fx:Script>
+	
+    <s:VGroup id="mainGroup">
+      <s:Label text="name: {person.name}; mood: {person.mood}"/>
+    </s:VGroup>
+</s:Application>

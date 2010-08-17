@@ -1,0 +1,21 @@
+<cluster>
+	<name>hadoopCluster</name>
+     <userName>hxi</userName>
+	 <password>assert(ans==42)</password>
+     <dataCenter>vCloud Evoluation Site</dataCenter>
+	<port>https://10.117.4.187/sdk/vimService </port>
+	<templates>
+		<template>
+			<name>masterNode</name>
+			<url>proto-thin</url>
+			<guestUserName>root</guestUserName>
+			<guestPassword>111111</guestPassword>
+			<hadoop_path>/home/hadoop</hadoop_path>
+		</template>
+		<template>
+			<name>slaveNode</name>
+			<url>/vdc/vm/templates/slave1</url>
+		</template>
+	</templates>
+	<name_template>${name}</name_template>
+</cluster>

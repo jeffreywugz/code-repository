@@ -1,0 +1,210 @@
+<?xml version="1.0"?> 
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+               xmlns:s="library://ns.adobe.com/flex/spark" 
+               xmlns:mx="library://ns.adobe.com/flex/mx" minWidth="955" minHeight="600"
+               applicationComplete="initApp();">
+  <fx:Style source="css/flex.css"/>
+  <!-- <fx:Script source="hadoop.as"/> -->
+  <fx:Script> 
+    <![CDATA[
+      import hadoop.*;
+      import mflex.*;
+      import com.adobe.serialization.json.JSON;
+      import mx.binding.utils.*;
+      import mx.events.DragEvent;
+      import mx.managers.DragManager;
+      import mx.core.DragSource;
+      import mx.core.FlexGlobals;
+      import mx.collections.IList;
+
+      [Bindable]
+      public var rpc:HTTPRpc = new HTTPRpc('/');
+      [Bindable]
+      public var preference:Preference = new Preference();
+      [Bindable]
+      public var clusterList:ClusterList = new ClusterList();
+      [Bindable]
+      public var fileList:FileList = new FileList();
+      [Bindable]
+      public var jobList:JobList = new JobList();
+      public var rLogUrl:String = "/log/get";
+      
+      private function initApp():void {
+              FlexGlobals.topLevelApplication.addEventListener(KeyboardEvent.KEY_UP, keyHandler);
+              Log.faultHook = debugOn;
+              Log.addRemote(rLogUrl);
+              Log.startTraceRemote();
+              BindingUtils.bindSetter(function():void{logView.verticalScrollPosition = logView.maxVerticalScrollPosition;}, logView, "maxVerticalScrollPosition");
+      }
+      
+      public function httpCall(expr:String):void {
+              var match:Array = expr.match(/(.+?)\((.*)\)/);
+              if(!match){
+                      Log.traceFault("httpCall", "illformed input!");
+                      return;
+              }
+              var url:String = match[1];
+              var args:String = match[2];
+              var obj:Object;
+              url = "/" + url.replace(".", "/");
+              args = "{" + args + "}";
+              args = args.replace(/(\w+)=/g,"\"$1\":");
+              obj = JSON.decode(args);
+              Log.traceCall(url, [obj]);
+              rpc = new HTTPRpc(url);
+              rpc.call(obj);
+      }
+
+      private function debugOn():void {
+              currentState = 'debug';
+              shellInput.setFocus();
+      }
+      private function debugOff():void {
+              currentState = 'normal';
+              console.setFocus();
+      }
+      private function debugToggle():void {
+              if(currentState == 'normal'){
+                      debugOn();
+              } else {
+                      debugOff();
+              }
+      }
+      
+      private function keyHandler(event:KeyboardEvent):void {
+              var char:String = String.fromCharCode(event.charCode).toUpperCase();
+              if(!event.ctrlKey)return ;
+              if(char == "C")
+                      debugToggle();
+      }
+      ]]> 
+      </fx:Script>
+    <fx:Declarations>
+      <s:RadioButtonGroup id="emailMe" selectedValue="{preference.preference.emailMe}"/>
+    </fx:Declarations>
+    
+    <s:states>
+      <s:State name="normal"/>
+      <s:State name="jobEd"/>
+      <s:State name="debug"/>
+    </s:states>
+
+    <mx:VDividedBox width="100%" height="100%">
+      <s:Panel width="100%" title="debug" includeIn="debug">
+        <s:layout><s:VerticalLayout/></s:layout>
+        <s:TextInput id="shellInput" width="100%" enter="httpCall(shellInput.text)" styleName="input"/>
+        <mx:Text width="100%" htmlText="{Log.fault}"  styleName="error"/>
+        <mx:Text width="100%" text="{JSON.encode(rpc.result)}"  styleName="output"/>
+        <mx:Text width="100%" text="{Log.debug}"/>
+      </s:Panel>
+      
+      <mx:TabNavigator borderStyle="solid" width="100%" height="400">
+        
+        <mx:VBox label="Cluster" width="100%" height="100%">
+          <s:Panel width="100%" height="100%" title="Cluster List">
+            <s:layout><s:VerticalLayout/></s:layout>
+            <s:Group>
+              <s:layout> <s:HorizontalLayout paddingLeft="5" paddingRight="5" paddingTop="5" paddingBottom="5"/> </s:layout>
+              <s:Button label="Add" width="80" click="clusterList.add('hadoop', preference.preference.defaultClusterSize)"/>
+              <s:Button label="Del" width="80" click="clusterList.del(clusterListView.selectedIndex)"/>
+              <s:Button label="Make It Ready" width="120" click="clusterList.makeItReady(clusterListView.selectedIndex)"/>
+            </s:Group>
+            <mx:DataGrid id="clusterListView" width="100%" height="100%" dataProvider="{clusterList.clusterList}" editable="true" >
+              <mx:columns>
+                <mx:DataGridColumn dataField="name" editable="true"/>
+                <mx:DataGridColumn dataField="numVMs" editable="true"/>
+                <mx:DataGridColumn itemRenderer="mflex.MProgressBar" headerText="Status" editable="false" paddingLeft="5"/>
+              </mx:columns> 
+            </mx:DataGrid>
+          </s:Panel>
+        </mx:VBox>
+        
+        <mx:VBox label="Job" width="100%" height="100%">
+          <s:Panel width="100%" height="100%" title="Job List">
+            <s:layout><s:VerticalLayout/></s:layout>
+            <s:Group>
+              <s:layout> <s:HorizontalLayout paddingLeft="5" paddingRight="5" paddingTop="5" paddingBottom="5"/> </s:layout>
+              <s:Button label="Add" width="80" click="currentState='jobEd';"/>
+              <s:Button label="Del" width="80" click="jobList.del(jobListView.selectedIndex)"/>
+              <s:Button label="Job Running Report" width="140" click="jobList.report(jobListView.selectedIndex)"/>
+            </s:Group>
+            <mx:DataGrid id="jobListView" width="100%" height="100%" dataProvider="{jobList.jobList}" editable="false" >
+              <mx:columns>
+                <mx:DataGridColumn dataField="cluster" editable="true"/>
+                <mx:DataGridColumn dataField="jar" editable="true"/>
+                <mx:DataGridColumn dataField="className" editable="true"/>
+                <mx:DataGridColumn dataField="input" editable="true"/>
+                <mx:DataGridColumn dataField="output" editable="true"/>
+                <mx:DataGridColumn dataField="args" editable="true"/>
+                <mx:DataGridColumn itemRenderer="mflex.MProgressBar" headerText="Progress" paddingLeft="5"/>
+              </mx:columns> 
+            </mx:DataGrid>
+            <mx:Form width="100%" height="100%" includeIn="jobEd">
+              <mx:FormHeading label=""/>
+              <mx:FormItem label="cluster"> <s:ComboBox id="jobEdCluster" width="300" dataProvider="{clusterList.clusterList}" labelField="name"/></mx:FormItem>
+          <mx:FormItem label="jar"> <s:HGroup verticalAlign="middle">
+            <s:Button label="upload" click="jobList.uploadJar()"/>
+            <s:Label text="{jobList.jarName}" click="jobList.uploadJar()"/>
+            <s:Label text="{jobList.uploadState}" click="jobList.uploadJar()"/>
+            <mx:ProgressBar id="jarUploadPrgress" indeterminate="true" label="uploading..." visible="{jobList.uploadState=='in progress...'}"/>
+          </s:HGroup></mx:FormItem>
+              <mx:FormItem label="class name"> <mx:TextInput id="jobEdClassName" text="grep" width="300"/></mx:FormItem>
+              <mx:FormItem label="input"> <mx:TextInput id="jobEdInput" text="input" width="300"/></mx:FormItem>
+              <mx:FormItem label="output"> <mx:TextInput id="jobEdOutput" text="output" width="300"/></mx:FormItem>
+              <mx:FormItem label="arguments"> <mx:TextInput id="jobEdArgs" text="'dfs'" width="300"/></mx:FormItem>
+              <mx:FormItem><mx:HBox height="100%" verticalAlign="middle">
+                <s:Button label="Submit" click="currentState='normal';jobList.submit(jobEdCluster.selectedItem.name, jobList.jarName, jobEdClassName.text, jobEdInput.text, jobEdOutput.text, jobEdArgs.text)"/>
+                  <s:Button label="Cancel" click="currentState='normal'"/>
+              </mx:HBox></mx:FormItem>    
+            </mx:Form>
+
+          </s:Panel>
+        </mx:VBox>
+        
+        <mx:VBox label="Data" width="100%" height="100%">
+          <s:Panel width="100%" height="100%" title="File List">
+            <s:layout><s:VerticalLayout/></s:layout>
+            <s:Group>
+              <s:layout> <s:HorizontalLayout paddingLeft="5" paddingRight="5" paddingTop="5" paddingBottom="5"/> </s:layout>
+              <s:Button label="Add" width="80" click="fileList.upload()"/>
+              <s:Button label="Refresh" width="80" click="fileList.get()"/>
+            </s:Group>
+
+            <mx:DataGrid width="100%" height="100%" dataProvider="{fileList.fileList}" dragEnabled="true">
+              <mx:columns>
+                <mx:DataGridColumn dataField="name"/>
+                <mx:DataGridColumn dataField="owner"/>
+                <mx:DataGridColumn dataField="size" />
+                <mx:DataGridColumn dataField="date" />
+              </mx:columns> 
+            </mx:DataGrid>
+          </s:Panel>
+        </mx:VBox>
+        
+        <mx:VBox label="Preference" width="100%" height="100%">
+          <mx:Form width="100%" height="100%">
+            <mx:FormHeading label=""/>
+            <mx:FormItem label="User Name"> <mx:TextInput id="userName" width="200" text="{preference.preference.userName}"/></mx:FormItem>
+            <mx:FormItem label="User Email"> <mx:TextInput id="userEmail" width="200" text="{preference.preference.userEmail}"/></mx:FormItem>
+            <mx:FormItem label="Default Cluster Size"> <s:NumericStepper id="defaultClusterSize" value="{preference.preference.defaultClusterSize}" stepSize="1" minimum="4" maximum="100"/></mx:FormItem>
+            <mx:FormItem label="Email Me When Job Complete">
+              <s:HGroup><s:RadioButton id="emailMeYes" group="{emailMe}" label="Yes"/>
+              <s:RadioButton id="emailMeNo" group="{emailMe}" label="No"/></s:HGroup>
+            </mx:FormItem>
+            <mx:FormItem>
+              <s:HGroup>
+                <s:Button label="Save" click="preference.save({userName:userName.text, userEmail:userEmail.text, defaultClusterSize:defaultClusterSize.value, emailMe:emailMe.selectedValue})"/>
+              </s:HGroup>
+            </mx:FormItem>    
+          </mx:Form>
+        </mx:VBox>
+      </mx:TabNavigator>
+      
+      <s:Panel id="console" width="100%" height="100%" title="Console">
+        <s:layout>
+          <s:VerticalLayout/>
+        </s:layout>
+        <mx:TextArea id="logView" width="100%" height="100%" text="{Log.log}" valueCommit="logView.verticalScrollPosition=logView.maxVerticalScrollPosition"  styleName="log"/>
+      </s:Panel>
+    </mx:VDividedBox>
+  </s:Application>

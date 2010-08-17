@@ -1,0 +1,14 @@
+#
+# dependent libraries for current foundry.  these must
+# be listed in the order they need to be loaded.
+#
+libcrypto.so.0.9.8
+libssl.so.0.9.8
+libcurl.so.4	
+libglib-2.0.so.0
+libgobject-2.0.so.0
+libgthread-2.0.so.0
+libgmodule-2.0.so.0
+libxml2.so.2
+libgvmomi.so.0
+

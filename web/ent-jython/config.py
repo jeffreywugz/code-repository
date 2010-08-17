@@ -1,0 +1,6 @@
+ent_cmd='LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./lib CLASSPATH=$CLASSPATH:jar/vijava2u120091204.jar:jar/dom4j-1.6.1.jar:jar/jna.jar:jar/vix.jar ./ent.py'
+url='https://10.117.4.187/sdk'
+user='hxi'
+passwd='assert(ans==42)'
+guestUser='root'
+guestPasswd='vmware'

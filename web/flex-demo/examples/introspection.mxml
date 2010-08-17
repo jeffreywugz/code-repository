@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- usingas/IntrospectionForIn.mxml -->
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml" creationComplete="initApp()">
+  <mx:Script><![CDATA[
+     private var obj:Object = new Object();
+     
+     private function initApp():void {
+        // Create the object.
+        obj.a = "Schotten Totten";
+        obj.b = "Taj Majal";
+        obj.c = "Durche die Wuste";     
+     }
+     
+     public function dumpObj():void {
+        for (var p:String in obj) {
+           ta1.text += p + ":" + obj[p] + "\n";
+        }
+     }
+  ]]></mx:Script>
+  <mx:TextArea id="ta1" width="400" height="200"/>
+  <mx:Button label="Dump Object" click="dumpObj()"/>
+</mx:Application>

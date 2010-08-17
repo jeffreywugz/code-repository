@@ -1,0 +1,55 @@
+require 'rake/clean'
+require 'rake/loaders/makefile'
+require 'gen'
+
+Rake.application.options.trace = true
+
+TARGET = 'lib-test'
+task :default => [:run]
+
+CC = 'gcc'
+CPP = 'cpp'
+INCFLAGS = '-I/usr/local/include'
+CFLAGS = "-Wall -g #{INCFLAGS} -DTEST_ANS42LIB"
+LD = 'ld'
+LDFLAGS = '-rdynamic -L/usr/local/lib -lcheck -lpthread -ldl'
+
+SRC = FileList['*.c']
+OBJ = SRC.ext('o')
+GH = SRC.ext('h') - ['test.h', 'util.h']
+CLEAN.include('*.o', GH, '.depends.mf')
+CLOBBER.include(TARGET)
+
+task :run => TARGET do
+    func_list = Gen.get_func_list_from_binary_file(TARGET)
+    tcase_reg = func_list.find_all do |func|
+        func =~ /_tcase_reg$/
+    end
+    sh "./#{TARGET} #{tcase_reg.join(' ')}"
+end
+
+file TARGET => OBJ do |t|
+    sh "#{CC} #{LDFLAGS} -o #{t.name} #{t.prerequisites.join(' ')}" 
+end
+
+rule '.o' => '.c' do |t|
+    sh "#{CC} -c #{CFLAGS} -o #{t.name} #{t.source}"
+end
+
+task :etags do
+    sh "etags.emacs #{SRC}"
+end
+
+task :header do
+    GH.each do |header|
+        Gen.gen_header(header.ext('c'))
+    end
+end
+    
+task :dep => :header do
+    sh "(for f in #{SRC.join(' ')}; do echo -n ''; #{CPP} #{INCFLAGS} -M -MM -MG $f;done) > .depends.mf"
+end
+
+if File.exist?(".depends.mf")
+    import ".depends.mf"
+end    

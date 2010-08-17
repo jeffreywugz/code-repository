@@ -1,0 +1,192 @@
+\documentclass[a4paper]{article}
+\usepackage{zhcfg}
+\usepackage{mine}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage[all]{hypcap}
+\usepackage{graphicx}
+\usepackage{verbatim}
+\usepackage{fancyvrb}
+\usepackage{indentfirst}
+\usepackage{pgfplots}
+% \usepackage{multirow}
+% \usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{pgffor}
+\usetikzlibrary{mindmap,chains}
+\usetikzlibrary{plotmarks,arrows,shadows,trees,shapes,positioning}
+
+\author{\name\ \stuid\ \href{mailto:huafengxi@gmail.com}{huafengxi@gmail.com}}
+\def\homework{统计机器学习理论与应用---libsvm的应用}
+\date{}
+\title{\homework}
+
+\begin{document}
+\pagestyle{fancy} \lhead{}
+\chead{\homework} \rhead{\thepage}
+\cfoot{\today}
+\maketitle
+
+\section{文档结构}
+这是一篇关于libsvm的应用的文档，描述了利用libsvm解决一个分类问题的过程。
+本文利用libsvm的python绑定编写了一个小程序，这个程序根据美国1994年的人口普查数据来预测一个人的年收入是否超过50k美元。
+
+这篇文档的结构如\autoref{DocumentMap}所示：
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[mindmap,concept color=blue!20, level 1 concept/.append style={sibling angle=33, minimum size=2.6cm}]
+\node [concept] {libsvm的应用}[clockwise from=45]
+child {node[concept] {编译和运行}}
+child {node[concept] {数据来源及预处理}}
+child {node[concept] {实验结果分析}}
+child {node[concept] {总结}};
+\end{tikzpicture}
+\caption{文档结构}
+\label{DocumentMap}
+\end{figure}
+
+\section{编译和运行}
+\autoref{WorkFlow}显示了编译和运行程序的流程.
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}[start chain=going below, node distance=5mm, every node/.style={rectangle, draw, fill=blue!20, 
+     text centered, rounded corners, minimum width=4cm}, every join/.style={->}]
+\node [draw,on chain,join]  {检查系统要求}; 
+\node [draw,on chain,join]  {获取源代码及测试数据};          
+\node [draw,on chain,join]  {编译};                     
+\node [draw,on chain,join]  {运行};     
+\end{tikzpicture}
+  \caption{编译和运行流程}
+  \label{WorkFlow}
+\end{figure}
+\subsection{检测系统要求}
+\begin{itemize}
+  \item linux或mingw
+  \item python运行时环境及开发环境 (test on version 2.4)
+  \item make及g++编译器
+\end{itemize}
+\subsection{获取源代码及测试数据}
+源代码以及测试数据可以从\href{http://code.google.com/p/svm-app}{http://code.google.com/p/svm-app} 上用如下命令获得:
+\begin{Verbatim}[frame=single]
+svn co http://svm-app.googlecode.com/svn/trunk/ svm-app
+\end{Verbatim}
+代码目录里面包含了测试数据及程序运行所需要的libsvm2.89的一些文件。
+\subsection{编译}
+测试程序是python编写的，不需要编译，但是libsvm及其python绑定需要编译。直接执行 \verb!make! 便可以运行测试程序，
+并会自动编译libsvm及其python绑定。为了确保正确编译libsvm的python绑定，可能需要用如下命令指定python的头文件目录：
+\begin{Verbatim}[frame=single]
+export PYTHON_INCLUDEDIR=/usr/include/python2.x
+\end{Verbatim}
+\subsection{运行}
+在源码根目录下执行如下命令可运行测试程序
+\begin{Verbatim}[frame=single]
+make
+\end{Verbatim}
+运行时libsvm会输出一些额外的信息，我暂时不知如何禁止这些输出。我们只需要关注错误率和运行时间即可。
+\section{数据来源及预处理}
+数据来源于\href{http://archive.ics.uci.edu/ml/datasets/Adult}{UC Irvine Machine Learning Repository}。
+数据集名称为Adult.此数据集来源于1994年的人口普查，特征如\autoref{DatasetFeature}所示：
+\begin{table}[h]
+\centering
+\begin{tabular}{l|l}
+Area& Social\\ \hline
+Number of Instances& 48842\\ \hline
+Number of Attributes& 14\\ \hline
+Attribute Characteristics& Categorical, Integer\\ \hline
+Associated Tasks& Classification\\ \hline
+Missing Values? & Yes\\
+\end{tabular}
+\caption{数据集特征}
+\label{DatasetFeature}
+\end{table}
+
+数据预处理分为两个步骤:
+\begin{description}
+  \item [数值化] 由于数据集中包含了Categorical数据，但是svm可以处理的量必须是实数，所以先要对Categorical数据编码，化为数值。编码的方法有多种，实验中，我们简单地将一个属性的不同取值映射为连续的整数。
+  \item [归一化] 如果某一个属性的绝对值较大，那么它对分类结果的影响可能也会较大，因此我们有必要对属性进行归一化操作。实验中，我们简单地进行线性缩放将原始属性映射到$［0，1］$区间。
+\end{description}
+
+\section{实验结果分析}
+\autoref{ErrorRatio}显示了应用三种不同核函数进行分类的错误率随测试样本增大时的变化情况。
+从中可以看出，对于这个问题，Linear核函数的分类效果反而是最好的。对于每一种核函数而言，分类效果都随着训练样本的增加而变好。
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}
+    \begin{axis}[xlabel=Number of Instances, ylabel=Error Ratio]
+    \addplot plot coordinates {(100,0.240000) (200,0.235000) (400,0.172500) (800,0.203750) (1600,0.180625)};
+    \addplot plot coordinates {(100,0.400000) (200,0.215000) (400,0.215000) (800,0.241250) (1600,0.167500)};
+    \addplot plot coordinates {(100,0.260000) (200,0.240000) (400,0.220000) (800,0.247500) (1600,0.205000)};
+    \legend{Linear\\Polynomial\\RBF\\}
+\end{axis}
+\end{tikzpicture}
+  \caption{错误率}
+  \label{ErrorRatio}
+\end{figure}
+
+\autoref{OtherErrorRatio} 列出了其余算法的错误率。
+从中可以看出，如果没有经过反复尝试，使用svm也得不到比其他算法更好的结果。
+\begin{table}[h]
+  \centering
+\begin{tabular}{|l|l|} \hline
+   Algorithm               & Error\\ \hline
+  C4.5                    & 15.54\\ \hline
+  C4.5-auto               & 14.46\\ \hline
+  C4.5 rules              & 14.94\\ \hline
+  Voted ID3 (0.6)         & 15.64\\ \hline
+  Voted ID3 (0.8)         & 16.47\\ \hline
+  T2                      & 16.84\\ \hline
+  1R                      & 19.54\\ \hline
+  NBTree                  & 14.10\\ \hline
+  CN2                     & 16.00\\ \hline
+ HOODG                   & 14.82\\ \hline
+ FSS Naive Bayes         & 14.05\\ \hline
+ IDTM (Decision table)   & 14.46\\ \hline
+ Naive-Bayes             & 16.12\\ \hline
+ Nearest-neighbor (1)    & 21.42\\ \hline
+ Nearest-neighbor (3)    & 20.35\\ \hline
+ OC1                     & 15.04\\ \hline
+\end{tabular}
+  \caption{其余算法的错误率}
+  \label{OtherErrorRatio}
+\end{table}
+
+
+接下来我们看看不同核函数训练所需要的时间，\autoref{TimeCosted} 显示了应用三种不同核函数进行分类所用的时间随测试样本增大时的变化情况。
+从中可以看出，不同核函数的训练和分类时间都随着样本数的增加而线性增加。
+因为Polynomial核函数的训练时间增加得很异常，所以在图中没有标出来.
+当训练样本数为800时，Polynomial核函数的训练时间增加到35.91s;
+当训练样本数为1600时，Polynomial核函数的训练时间增加到215.81s.
+当然这可能是由于程序的bug造成的。
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}
+    \begin{axis}[xlabel=Number of Instances, ylabel=Time s]
+    \addplot plot coordinates {(100,0.021732) (200,0.054631) (400,0.142488) (800,0.571809) (1600,1.498872)};   
+    \addplot plot coordinates {(100,0.047390) (200,0.729526)}; %(400,2.963047) (800,35.911172) (1600,215.814512)};
+    \addplot plot coordinates {(100,0.008446) (200,0.020080) (400,0.055847) (800,0.166285) (1600,0.523362)};   
+    \legend{Linear\\Polynomial\\RBF\\}
+\end{axis}
+\end{tikzpicture}
+  \caption{时间}
+  \label{TimeCosted}
+\end{figure}
+
+\section{总结}
+svm确实是一种比较值得尝试的统计机器学习模型，\autoref{SVMApplication}显示了应用svm解决问题的流程：
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}[start chain=going right, node distance=5mm,
+  every node/.style={rectangle, draw, drop shadow, fill=blue!20, 
+     text centered, rounded corners, text width=3.5cm}, every join/.style={->}]
+\node (data preprocess)[on chain,join, fill=red!20] {数据预处理};
+\node (model select)[on chain,join, fill=red!20] {模型选择};
+\node (test)[on chain,join, fill=red!20] {测试};
+\node [rectangle split, rectangle split parts=2, below=.5cm of data preprocess]{数值化 \nodepart{second}归一化} edge[-](data preprocess);
+\node [rectangle split, rectangle split parts=2, below=.5cm of model select]{kernel选择 \nodepart{second}参数选择} edge[-](model select);
+\node [rectangle split, rectangle split parts=2, below=.5cm of test]{检验算法效果 \nodepart{second}如有必要,返回前两步} edge[-](test);
+\end{tikzpicture}
+  \caption{应用svm解决问题的流程}
+  \label{SVMApplication}
+\end{figure}
+参数的选择对训练结果的影响应该也很大，不过在这次实验中所有的核函数都使用默认参数，并未涉及到参数选择。事实上，这样做的效果并不是很好，与其他算法的最好结果相比还是有较大差距的。
+\end{document}

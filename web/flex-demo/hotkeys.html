@@ -1,0 +1,25 @@
+<html>
+  <head>
+    <title>Demo of HotKey</title>
+    <script type="text/javascript" src="/m.js"></script>
+    <script type="text/javascript">
+      function hotkeyHandler(event) {
+          var console = document.getElementById('console');
+          var msg = document.createTextNode(event.charCode.toString());
+          console.replaceChild(msg, console.childNodes[0]);
+          if(!event.ctrlKey)return;
+          var key = String.fromCharCode(event.charCode).toUpperCase();
+          if(key=='X')
+              alert("C-x pressed!");
+      }
+      function init() {
+          document.addEventListener("keypress", hotkeyHandler, false);
+      }
+      init();
+      </script>
+    </head>
+    <body>
+      <div id="console">
+      </div>
+    </body>
+</html>

@@ -1,0 +1,5 @@
+corpus_file=corpus/words_bag
+corpus_config=corpus/config
+n_cluster=15
+max_n_iter=30
+

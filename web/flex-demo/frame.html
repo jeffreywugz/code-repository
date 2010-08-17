@@ -1,0 +1,33 @@
+<html>
+  <head>
+    <title>A simple frameset document</title>
+    <script type="text/javascript">
+    <script type="text/javascript" src="/m.js"></script>
+    <script type="text/javascript">
+      function hotkeyHandler(event) {
+          // var console = document.getElementById('console');
+          // var msg = document.createTextNode(event.charCode.toString());
+          // console.replaceChild(msg, console.childNodes[0]);
+          if(!event.ctrlKey)return;
+          var key = String.fromCharCode(event.charCode).toUpperCase();
+          if(key=='X')
+              toggleFrame('console');
+      }
+      function init() {
+          top.addEventListener("keypress", hotkeyHandler, false);
+      }
+      init();
+      function toggleFrame(frame){
+          var frameset = document.getElementById("masterFrameset");
+          if(frameset.cols == "0, *")
+              frameset.cols = "*, *";
+          else
+              frameset.cols = "0, *";
+      }
+      </script>
+    </head>
+    <frameset id="masterFrameset" cols="50%, 50%">
+      <frame id="console"' src="console.html"/>
+      <frame id="shell" src="a.html"/>
+    </frameset>
+</html>

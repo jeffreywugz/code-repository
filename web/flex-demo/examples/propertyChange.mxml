@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- http://blog.flexexamples.com/2007/09/27/detecting-changes-to-an-object-using-the-flex-objectproxy-class/ -->
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml"
+        layout="vertical"
+        verticalAlign="middle"
+        backgroundColor="white"
+        creationComplete="init();">
+
+    <mx:Script>
+        <![CDATA[
+            import mx.events.PropertyChangeEvent;
+            import mx.utils.ObjectProxy;
+
+            private var object:Object = {};
+            private var objectProxy:ObjectProxy;
+
+            private function init():void {
+                objectProxy = new ObjectProxy(object);
+                objectProxy.addEventListener(PropertyChangeEvent.PROPERTY_CHANGE, updateChange);
+                objectProxy.name = "My Object";
+                objectProxy.id = 31;
+
+                /* Note: Any assignments made directly to the "object"
+                   Object do not dispatch the propertyChange event. */
+                object.isDebug = false;
+                object.id = 33;
+
+                /* Note: Even though the earlier assignment to the "id"
+                   property  didn't dispatch the propertyChange event,
+                   the "oldValue" property is still displayed as 33. */
+                objectProxy.id = 45;
+            }
+
+            private function updateChange(evt:PropertyChangeEvent):void {
+                arrColl.addItem(evt);
+            }
+        ]]>
+    </mx:Script>
+
+    <mx:ArrayCollection id="arrColl" />
+
+    <mx:DataGrid dataProvider="{arrColl}"
+            sortableColumns="false"
+            draggableColumns="false"
+            width="100%"
+            height="100%">
+        <mx:columns>
+            <mx:DataGridColumn dataField="type" />
+            <mx:DataGridColumn dataField="property" />
+            <mx:DataGridColumn dataField="newValue" />
+            <mx:DataGridColumn dataField="oldValue" />
+            <mx:DataGridColumn dataField="source" />
+        </mx:columns>
+    </mx:DataGrid>
+
+</mx:Application>

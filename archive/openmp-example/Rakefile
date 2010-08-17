@@ -1,0 +1,21 @@
+Rake.application.options.trace = false
+
+TARGET = 'thread-private'
+task :default => [:run]
+
+CC = 'gcc'
+CPP = 'cpp'
+INCFLAGS = '-I.'
+CFLAGS = "-Wall -g -fopenmp #{INCFLAGS}"
+LD = 'ld'
+LDFLAGS = ''
+
+
+task :run => [TARGET] do
+    sh "./#{TARGET}"
+end
+
+file TARGET => [ "#{TARGET}.c" ] do |t|
+    sh "#{CC} #{CFLAGS} #{LDFLAGS} -o #{t.name} #{t.prerequisites.join(' ')}" 
+end
+

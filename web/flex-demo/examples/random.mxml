@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+               xmlns:s="library://ns.adobe.com/flex/spark"
+               xmlns:mx="library://ns.adobe.com/flex/halo" minWidth="1024" minHeight="768">
+    <fx:Declarations>
+        <!-- Place non-visual elements (e.g., services, value objects) here -->
+    </fx:Declarations>
+   
+    <fx:Script>
+        <![CDATA[
+           
+            private function generateRandomNumber( start:Number, end:Number ):void
+            {
+                var randomNum:Number;
+                if( end == 1 )
+                {
+                    // Number is between 0 and 1, don't round.
+                    randomNum = Math.random();
+                }
+                else{
+                    // Number is between 0 and 100 or 1000, round the number
+                    randomNum = Math.round( Math.random() * end );
+                }
+                // Show random number in TextInput
+                randomNumber.text = randomNum.toString();
+            }
+           
+        ]]>
+    </fx:Script>
+   
+    <s:layout>
+        <s:VerticalLayout paddingLeft="5" paddingRight="5"
+                          paddingTop="5" paddingBottom="5" />
+    </s:layout>
+   
+   
+    <s:VGroup id="hgroup">
+        <s:Button label="Number between 0 and 1"
+                  click="generateRandomNumber(0,1)" width="250"/>
+        <s:Button label="Number between 0 and 100"
+                  click="generateRandomNumber(0,100)" width="250"/>
+        <s:Button label="Number between 0 and 1000"
+                  click="generateRandomNumber(0,1000)" width="250"/>
+    </s:VGroup>
+    <s:TextInput id="randomNumber" width="{hgroup.width}" editable="false"
+                 textAlign="center" height="60" fontSize="20"
+                 fontWeight="bold"/>
+</s:Application>

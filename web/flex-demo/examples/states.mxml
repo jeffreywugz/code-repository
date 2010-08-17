@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+    xmlns:s="library://ns.adobe.com/flex/spark" 
+    xmlns:mx="library://ns.adobe.com/flex/mx">
+    <fx:Script>
+        <![CDATA[
+            private function signin(): void {
+                 // Implementation of signin 
+            }
+
+            private function register(): void {
+                // Implementation of register
+            }
+        ]]>
+    </fx:Script>
+	
+    <s:states>
+        <s:State name="signin"/>
+        <s:State name="register"/>
+    </s:states>
+	
+    <s:Group id="mainGroup">
+        <s:layout>
+            <s:VerticalLayout/>
+        </s:layout>
+		
+    <mx:Label text="Sign in:" fontWeight="bold" paddingLeft="12" fontSize="14" id="loginLabel" width="100%"/>
+		
+    <mx:Form id="loginForm" width="100%" paddingTop="3" paddingBottom="3">
+
+        <mx:FormItem label="First name:" includeIn="register" id="firstNameItem" alpha="0.0">
+            <s:TextInput id="firstName" width="220"/>
+        </mx:FormItem>
+
+        <mx:FormItem label="Last name:" includeIn="register" id="lastNameItem" alpha="0.0">
+            <s:TextInput id="lastName" width="220"/>
+        </mx:FormItem>
+
+        <mx:FormItem label="Email:" id="emailItem">
+            <s:TextInput id="email" width="220"/>			
+        </mx:FormItem>
+
+        <mx:FormItem label="Password:" id="passwordItem">
+            <s:TextInput id="password" displayAsPassword="true" width="220"/>
+        </mx:FormItem>
+
+        <mx:FormItem label="Confirm:" includeIn="register" id="confirmItem" alpha="0.0">
+             <s:TextInput id="passwordConfirmation" displayAsPassword="true" width="220"/>			
+        </mx:FormItem>
+    </mx:Form>
+
+    <s:Group>
+        <s:layout>
+            <s:HorizontalLayout paddingLeft="100"/>
+        </s:layout>
+        <s:Button label="Sign in" label.register="Register" id="loginButton" 
+            enabled="true" click.signin="signin()" click.register="register()"/>
+			
+        <mx:LinkButton label="Need to register?" 
+            click="currentState = 'register'" includeIn="signin"/>
+        <mx:LinkButton label="Return to signin"
+            click="currentState = 'signin'" includeIn="register"/>
+     </s:Group>
+		
+    <mx:CheckBox id="rememberMe" label="Remember me on this computer" paddingLeft="110"/>
+ </s:Group>
+</s:Application>

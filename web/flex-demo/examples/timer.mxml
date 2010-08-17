@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+    xmlns:s="library://ns.adobe.com/flex/spark" 
+    xmlns:mx="library://ns.adobe.com/flex/mx"
+    applicationComplete="initApp();">
+    <fx:Script>
+        <![CDATA[
+          import mx.utils.StringUtil;
+          import flash.utils.Timer;
+          import flash.events.TimerEvent;
+          
+          [Bindable]
+          public var time:String = "unknown";
+          [Bindable]
+          public var countDown:int = 3;
+          public var myTimer:Timer = new Timer(1000, countDown);
+          
+          private function initApp():void {
+                  setInterval(updateTime, 1000);
+                  myTimer.start(); 
+                  myTimer.addEventListener(TimerEvent.TIMER, function(e:TimerEvent):void{countDown--;});
+                  myTimer.addEventListener(TimerEvent.TIMER_COMPLETE, function(e:TimerEvent):void{countDownView.visible=false;});
+          }
+
+          private function updateTime(): void {
+                  var date:Date = new Date();
+                  time = StringUtil.substitute("{0}:{1}:{2}", date.getHours(), date.getMinutes(), date.getSeconds());
+          }
+          ]]>
+    </fx:Script>
+	
+    <s:VGroup id="mainGroup">
+      <s:Label text="current time: {time}"/>
+      <s:Label id="countDownView" text="count down to disapear: {countDown}"/>
+    </s:VGroup>
+</s:Application>

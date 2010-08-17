@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<interface>
+  <requires lib="gtk+" version="2.14"/>
+  <!-- interface-naming-policy project-wide -->
+  <object class="GtkWindow" id="win">
+    <property name="width_request">300</property>
+    <property name="height_request">200</property>
+    <property name="visible">True</property>
+    <signal name="destroy" handler="win_exit"/>
+    <child>
+      <object class="GtkButton" id="button1">
+        <property name="label" translatable="yes">exit</property>
+        <property name="visible">True</property>
+        <property name="can_focus">True</property>
+        <property name="receives_default">True</property>
+        <signal name="clicked" handler="win_exit"/>
+      </object>
+    </child>
+  </object>
+</interface>

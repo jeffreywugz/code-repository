@@ -1,0 +1,15 @@
+PRJ=$(shell basename `pwd`)
+CC=nvcc
+.PHONY: all emu gpu clean
+
+all: emu
+$(PRJ): $(PRJ).cu
+	$(CC) -o $@ $(CFLAG) $^
+emu: clean
+	CFLAG=--device-emulation make run -f ../cuda_build
+gpu: clean
+	CFLAG= make run -f ../cuda_build
+run: $(PRJ)
+	./$(PRJ)
+clean:
+	rm -rf $(PRJ) *.o *~

@@ -1,0 +1,10 @@
+<scriptConfiguration version="4.0">
+  <key>ent.demo</key>
+  <description>ENT: ESX Networking Toolkit</description>
+  <name>ENT Demo VMWorld 2009</name>
+  <vendor>VMware Beijing</vendor>
+  <view parent="Inventory.Datacenter">
+    <title locale="en">ENT 2.0</title>
+    <url>http://10.117.4.52:8080/ent</url>
+  </view>
+</scriptConfiguration>

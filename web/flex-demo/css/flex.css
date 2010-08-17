@@ -1,0 +1,35 @@
+@namespace mx "library://ns.adobe.com/flex/mx";
+@namespace s "library://ns.adobe.com/flex/spark";
+
+.log {
+    fontFamily: _typewriter;
+    contentBackgroundColor: #ffffff;
+    color: #000000;
+}
+
+.input {
+    fontFamily: _typewriter;
+    fontWeight: bold;
+    contentBackgroundColor: #ffffff;
+    color: #000000;
+}
+
+.output {
+    fontFamily: _typewriter;
+    contentBackgroundColor: #F3F5F7;
+    color: #000000;
+}
+
+.error {
+    fontFamily: _typewriter;
+    contentBackgroundColor: #ddffdd;
+    color: #ff0000;
+}
+
+mx|ProgressBar {
+    color: #000000;
+}
+
+s|Label {
+    verticalAlign: middle;
+}

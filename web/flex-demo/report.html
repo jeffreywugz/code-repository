@@ -1,0 +1,15 @@
+<html>
+  <head>
+    <title>vHadoop Job Running Report</title>
+  </head>
+  <body>
+    <h1>vHadoop Job Running Report</h1>
+    <table border="1" width="100%">
+      <tr><td>cluster</td><td>${cluster}</td></tr>
+      <tr><td>jar</td><td>${jar}</td></tr>
+      <tr><td>class name</td><td>${className}</td></tr>
+      <tr><td>input</td><td><a href="hdfs://${nameNode}/${input}">${input}</a></td></tr>
+      <tr><td>output</td><td><a href="hdfs://${nameNode}/${output}">${output}</a></td></tr>
+      <tr><td>args</td><td>${args}</td></tr>
+    </table> 
+  </html>

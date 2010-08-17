@@ -1,0 +1,361 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage[all]{hypcap}
+\usepackage{verbatim}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{fancyvrb}
+% \usepackage{multirow}
+% \usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{pgffor}
+\usetikzlibrary{mindmap,chains}
+\usetikzlibrary{plotmarks,arrows,shadows,trees,shapes,positioning}
+\usepackage[underline=true,rounded corners=false]{pgf-umlsd}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\author{xihuafeng \href{mailto:huafengxi@gmail.com}{huafengxi@gmail.com}}
+\date{}
+\title{CUDA Run Wrapper}
+
+\begin{document}
+\pagestyle{fancy} \lhead{}
+\chead{CUDA Run Wrapper} \rhead{\thepage}
+\cfoot{\today}
+\maketitle
+% \tableofcontents
+
+\section{Document Map}
+This document is about a utility we called ``CUDA Run Wrapper''---a utility for simplifying the task of automatic selecting a proper GPU for a CUDA program. \autoref{DocumentMap} shows this articles' structure.
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}[mindmap,concept color=blue!20, level 1 concept/.append style={sibling angle=35, minimum size=2.6cm}]
+\node [concept] {CUDA Run Wrapper}[clockwise from=35]
+  child {node[concept] {Why do we need it?}}
+  child {node[concept] {How does it work?}}
+  child {node[concept] {How can I install and use it?}};
+\end{tikzpicture}
+  \caption{document map}
+  \label{DocumentMap}
+\end{figure}
+
+\section{Why do We need CUDA Run Wrapper?}
+We first give a brief description for CUDA, and then point out that CUDA platform doesn't provide a method for automatic selecting a proper GPU for a CUDA program in multiple GPU environment. Hence, we need a tool to simplify this task. CUDA Run Wrapper just comes out for this purpose.
+\subsection{What is CUDA?}
+NVIDIA CUDA is a general purpose parallel computing architecture that leverages the parallel compute engine in NVIDIA graphics processing units (GPUs) to solve many complex computational problems in a fraction of the time required on a CPU.
+
+With over 100 million CUDA-enabled GPUs sold to date, thousands of software developers are already using the free CUDA software development tools to solve problems in a variety of professional and home applications -- from video and audio processing and physics simulations, to oil and gas exploration, product design, medical imaging, and scientific research.
+
+CUDA allows developers to program applications in high level languages like C and will support industry standard APIs such as Microsoft DirectX and OpenCL, to seamlessly integrate into the development environments of today and tomorrow.
+\begin{itemize}
+  \item ``CUDA'' means ``Compute Unified Device Architecture''
+  \item It provide user a General purpose programming model on GPU
+    \begin{itemize}
+      \item User kicks off batches of threads on the GPU
+      \item GPU = dedicated super-threaded, massively data parallel co-processor
+    \end{itemize}
+  \item It contains a complete software stack
+    \begin{itemize}
+      \item Compute oriented drivers, language, and tools
+      \item Driver for loading computation programs into GPU
+     \end{itemize}
+\end{itemize}
+\subsection{What is Wrong with CUDA in Multiple GPU Environment?}
+CUDA does support multiple GPU. Applications can distribute work across multiple GPUs. This is not done automatically, however, so the application has complete control. But perhaps not every programmer is willing to have such ``complete control'', because:
+\begin{itemize}
+  \item In order to have ``complete control'', we have to write some code to manage GPU, this is boring. 
+  \item Even after we have done the boring coding, we still haven't got ``complete control'', because there is someone else who use the GPU and launch CUDA programs.
+\end{itemize}
+Since CUDA does not manage multiple GPU automatically, we decide to write a CUDA Run Wrapper which will become a proxy for automatic selecting a proper GPU for a CUDA program.
+
+\subsection{What exactly CUDA Run Wrapper can Do?}
+\begin{itemize}
+  \item It can select a proper GPU for a CUDA program.
+  \item It will not monitor the state of out CUDA programs, so it can not
+     \begin{itemize}
+       \item Report the statistical information to us.
+       \item Restart the abnormal exited program.
+     \end{itemize}
+  \item It is not a job scheduling system, so it can not accept a bunch of tasks and execute them at proper time.
+  \item It will not speedup our CUDA programs generally.
+\end{itemize}
+That's to say CUDA Run Wrapper just want to provide a proxy which select a proper GPU for a CUDA program, everything else is beyond its ability.
+
+\section{How does CUDA Run Wrapper Work?}
+We will talk about the User Interface, Working Mechanism, Algorithms and Software architecture of CUDA Run Wrapper in this section.
+\subsection{The User Interface}
+The user interface of CUDA Run Wrapper is just a script, we can use this script to launch a CUDA program.
+This is why we named it ``CUDA Run Wrapper''.
+
+Although we choose to use a script to launch a CUDA program, but there are other mechanisms to do the job of selecting  a proper GPU.
+Let us compare the different mechanisms and figure out why we choose to use a script as a wrapper.
+
+If we want to provide a proxy which select GPU for CUDA programs, we must modify something during a CUDA program's life cycle.
+Let us focus on the compatibility and programmer's extra work. \autoref{ProgramLifeCycle} shows a program's life cycle.
+
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}[start chain=going right, node distance=5mm, every node/.style={rectangle, draw, drop shadow, fill=blue!20, 
+     text centered, rounded corners, text width=4cm}, every join/.style={->}]
+\node (write)[on chain,join, fill=red!20] {write program};
+\node (compile)[on chain,join, fill=red!20] {compile program};
+\node (run)[on chain,join, fill=red!20] {run program};
+\node [rectangle split, rectangle split parts=3, below=.5cm of write]{provide a library \nodepart{second}need modify source code \nodepart{third}not compatible at source level} edge[-](write);
+\node [rectangle split, rectangle split parts=3, below=.5cm of compile]{provide a compiler \nodepart{second}need to modify build system \nodepart{third}not compatible at binary level} edge[-](compile);
+\node [rectangle split, rectangle split parts=3, below=.5cm of run]{provide some daemons and shared libraries\nodepart{second}modify runtime environment \nodepart{third}totally transparent for programmer} edge[-](run);
+\end{tikzpicture}
+  \caption{program's life cycle}
+  \label{ProgramLifeCycle}
+\end{figure}
+
+Obviously, modify the process of ``run program'' is the best choice if we can.
+Actually by using LD\_PRELOAD mechanism , we can modify the program's behavior at launch time.
+
+\subsection{LD\_PRELOAD Mechanism}
+A dynamic linker is the part of an operating system (OS) that loads and links the shared libraries for an executable when it is run.
+On Unix and Unix-like operating systems, typically we can change the dynamic linker's behaviour based on a common set of environment variables, including LD\_LIBRARY\_PATH and LD\_PRELOAD.
+
+LD\_PRELOAD instructs the loader to load additional libraries into a program, beyond what was specified when it was compiled. It allows users to add or replace functionality when they run a program and can be used for beneficial purposes.
+
+\begin{itemize}
+  \item We set the environment variable LD\_PRELOAD to instruct dynamic linker to use our shared library.
+  \item And our shared library provide a constructor which will be called when the shared library load, before entering main.
+  \item In this constructor we probe the GPU information and set the proper device for the CUDA program.
+\end{itemize}
+
+\subsection{What Device Information We can Get?}
+Our purpose is to choose a proper GPU for a CUDA program, so not any information is useful.
+We want information that help us to decide how busy a device is.
+CUDA does not provide API for this purpose, So there's no way to check if a device is 'free' or not directly.
+But we still have methods to collect some useful information, including:
+\begin{itemize}
+  \item If our application is the only user of GPU, by tracking the CUDA program launching and exiting, we can determine how many CUDA program is running on each GPU.
+  \item We can run a little benchmark CUDA program on each GPU to see which one is free.
+  \item We can infer which device is busy based on their Free Memory. Andthe free memory information can be get using CUDA driver API.
+\end{itemize}
+We do not choose the first method because we do not want to make the assumption that our application is the only user of GPU,
+We run code on each GPU to get its free memory using CUDA API, and record the time this process taken as a benchmark.
+This is the combination the last two methods.
+
+Before probe a GPU's free memory, we must create a CUDA context attached with
+this GPU. It is a waste that every CUDA program creates the context and
+then destroys them after geting the GPU's information, especially considering the
+operations of creating and destroying CUDA context are slow. So we use a daemon to
+provide device information to different CUDA programs. The daemon
+creates the CUDA contexts once and then reuse them.
+
+\subsection{All Together}
+CUDA Run Wrapper consists of three components, as shown in \autoref{SoftwareComponent}.
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}[every child node/.style={anchor=base},sibling distance=4.5cm,level distance=3.5cm, rounded corners,
+  every node/.style={rectangle split, draw, drop shadow, rectangle split parts=2,fill=blue!20, text centered, rounded corners, text width=3.5cm}] 
+  \node[text width=4cm] {CUDA Run Wrapper \nodepart{second}The wrapper will automatically select a proper GPU for a CUDA program}
+     child {node[]{wrapper script \nodepart{second}provide a script to launch a CUDA program as user interface}}
+     child {node[]{libcudarun \nodepart{second}provide a function cuda\_set\_best\_device which will be called before main}}
+     child {node[]{daemon \nodepart{second}probe device information and send it to different CUDA program client}};
+\end{tikzpicture}
+ \caption{software component}
+ \label{SoftwareComponent}
+\end{figure}
+
+When we use the wrapper script to launch CUDA program, the environment
+variable LD\_PRELOAD will be set properly, and the constructor in our shared
+library will be called, then the constructor will get device information from
+daemon. Once the constructor has receive device information, it will use some algorithm
+to evaluate every GPU to a real number which represent this GPU's busy
+degree. Finally, this constructor will set best device according to GPU's busy
+degree. Of course we must start daemon before any CUDA program can be launched and stop daemon
+after we have done.
+And \autoref{TypicalInteractSequence} shows an interact sequence for a typical usage.
+\begin{figure}[h]
+  \centering
+\begin{sequencediagram}
+    \newthread[blue!20]{script}{cuda-run.py}
+    \newinst{cudaprogram}{cuda-program}
+    \newinst{sharedlib}{libcudarun.so}
+    \newthread[red!20]{daemon}{daemon}
+
+    \begin{sdloop}[red!20]{Start Daemon}
+      \begin{call}{script}{daemon.start}{daemon}{}
+      \end{call}
+    \end{sdloop}
+    
+    \begin{sdloop}[green!20]{Run Loop}
+      \begin{call}{script}{run cuda-program}{cudaprogram}{}
+        \begin{call}{cudaprogram}{cuda\_set\_best\_device()}{sharedlib}{}
+          \begin{call}{sharedlib}{get device info}{daemon}{}
+          \end{call}
+          \begin{callself}{sharedlib}{evaluate\_device()}{}
+          \end{callself}
+          \begin{callself}{sharedlib}{set\_best\_device()}{}
+          \end{callself}
+        \end{call}
+        \begin{callself}{cudaprogram}{continue running...}{}
+        \end{callself}
+      \end{call}
+    \end{sdloop}
+
+    \begin{sdloop}[red!20]{Stop Daemon}
+      \begin{call}{script}{daemon.stop}{daemon}{}
+      \end{call}
+    \end{sdloop}
+\end{sequencediagram}
+  \caption{typical interact sequence}
+  \label{TypicalInteractSequence}
+\end{figure}
+
+\subsection{How to Evaluate the GPU's Busy Degree?}
+Assume that we have $n$ GPUs $\{D_i \mid 1 \le i \le n \}$,
+for Device $D_i$ we  know its free memory $FreeMem_i$, and the time taken to get the memory information $Delay_i$.
+Then we should have a method to map each Device $D_i$ to a real number $Score_i$ which represents the busy degree
+of Device $D_i$:
+   \[ Score_i > Score_j \Rightarrow D_j \textrm{ is busier than } D_i \]
+Let us call this magic function $Evaluate$:
+   \[ \overrightarrow{Score} = Evaluate(\overrightarrow{FreeMem}, \overrightarrow{Delay}) \]
+Note that $\overrightarrow{Score}, \overrightarrow{FreeMem}, \overrightarrow{Delay}$ are vectors. The function $Evaluate$ is not very easy to compute AS
+A WHOLE.
+For Simplicity we can decompose $Evaluate$.
+
+First, We normalize $\overrightarrow{FreeMem}$ and $\overrightarrow{Delay}$,
+\[ \begin{array}{rl}
+  \displaystyle FreeMem_i^{\epsilon} &= \frac{FreeMem_i}{\sum_{i=1}^n FreeMem_i} \\
+  \displaystyle Delay_i^{\epsilon} &= \frac{Delay_i}{\sum_{i=1}^n Delay_i} \\
+  \end{array} \]
+Then, We can evaluate each Device to real number,INDEPENDENTLY.
+\[ Score_i = evaluate(FreeMem_i^{\epsilon}, Delay_i^{\epsilon})\]
+
+Currently, we define the function $evaluate$ as:
+\[ evaluate(FreeMem_i^{\epsilon}, Delay_i^{\epsilon}) = FreeMem_i^{\epsilon} \times \Lambda_{FreeMem} + Delay_i^{\epsilon} \times \Lambda_{Delay} \]
+$\Lambda_{FreeMem}$ and $Lambda_{Delay}$ are weights of $FreeMem$ and $Delay$, and satisfy:
+\[\Lambda_{FreeMem} + \Lambda_{Delay} = 1 \]
+
+\subsection{When does Daemon Update Device Information?}
+CUDA programs get device information from Daemon and Daemon probe device
+information itself, the two operations are asynchronous.  Daemon maintains a
+device information copy, and whenever a CUDA program requests device information
+from Daemon, Daemon will reply immediately use the maintained device
+information. Thus, the device information CUDA program get is probably outdated.
+Whenever Daemon receives a CUDA program's request, it will update the maintained device information if it is outdated.
+
+Assume we have got the following information,
+\begin{description}
+  \item[$T_{get}$] When did the Daemon get device information
+  \item[$T_{current}$] Current Time
+  \item[$N_{client}$] How many CUDA program already receive information
+  \item[$T_{max}$] How long before the device information could survive before it become invalid
+  \item[$N_{max}$] How many requests will the daemon serve before the device information become invalid
+\end{description}
+Then we use the function below to check whether the information is outdated:
+\[ IsInvalid(T_{get}, N_{client}) = \begin{cases}
+  True & \text{if $T_{current}-T_{get} \le T_{max} \land N_{client} < N_{max}$,} \\
+  False &\text{otherwise.}
+\end{cases}
+\]
+
+\subsection{More Details on Implementation}
+We can get the developer's reference manual from: \\
+\href{http://code.google.com/p/cuda-run-wrapper"}{http://code.google.com/p/cuda-run-wrapper}.
+\section{How can I Install and Use CUDA Run Wrapper?}
+This section describe how to install, configure and use CUDA Run Wrapper.
+\autoref{WorkFlow} shows the work flow.
+\begin{figure}[h]
+  \centering
+\begin{tikzpicture}[start chain=going below, node distance=5mm, every node/.style={rectangle, draw, fill=blue!20, 
+     text centered, rounded corners, minimum width=4cm}, every join/.style={->}]
+\node [draw,on chain,join]  {Check System Requirement}; 
+\node [draw,on chain,join]  {Get Source Code};          
+\node [draw,on chain,join]  {Test};                     
+\node [draw,on chain,join]  {Make Package Tarball};     
+\node [draw,on chain,join]  {Install};                  
+\node [draw,on chain,join]  {Run};                      
+\node [draw,on chain,join]  {Configure};                
+
+\end{tikzpicture}
+  \caption{install and run work flow}
+  \label{WorkFlow}
+\end{figure}
+\subsection{Check System Requirement}
+\begin{itemize}
+  \item linux only (test on kernel 2.6)
+  \item python runtime (test on version 2.6)
+  \item CUDA run time (test on version 2.1)
+\end{itemize}
+
+\subsection{Get Source Code}
+We can download source tarball from \\
+\href{http://code.google.com/p/cuda-run-wrapper"}{http://code.google.com/p/cuda-run-wrapper}
+\begin{Verbatim}[frame=single]
+wget http://cuda-run-wrapper.googlecode.com/files/cuda-run-0.1-pkg.tar.bz2
+\end{Verbatim}
+or we can check out the latest source from svn repository:
+\begin{Verbatim}[frame=single]
+svn co http://cuda-run-wrapper.googlecode.com/svn/trunk/ \
+   cuda-run-wrapper
+\end{Verbatim}
+
+\subsection{Test}
+We can test CUDA Run Wrapper by  running a example CUDA programs  using the package,
+do this using the command below:
+\begin{Verbatim}[frame=single]
+make test
+\end{Verbatim}
+Alternatively, We can test the package by running more CUDA programs simultaneously using the command below:
+\begin{Verbatim}[frame=single]
+make profile
+\end{Verbatim}
+
+\subsection{Make Package Tarball}
+Package tarball is a tarball which contains all the files we need. 
+We can create the package tarball using the command below:
+\begin{Verbatim}[frame=single]
+make pkg
+\end{Verbatim}
+
+\subsection{Install}
+We install the package by extracting the package tarball.
+First let us determine where to extract the package tarball, i.e. we select \verb!~/cuda-run-wrapper! as destination directory.
+Then, we create the destination directory if it doesn't exist.
+\begin{Verbatim}[frame=single]
+mkdir ~/cuda-run-wrapper
+\end{Verbatim}
+Extract the package tarball to destination directory.
+\begin{Verbatim}[frame=single]
+cp cuda-run-0.1-pkg.tar.bz2 ~/cuda-run-wrapper
+cd ~/cuda-run-wrapper
+tar jxf cuda-run-0.1-pkg.tar.bz2
+\end{Verbatim}
+At last, we may wish to create a link to \verb!~/cuda-run-wrapper/cuda_run.py!.
+\begin{Verbatim}[frame=single]
+ln -sf ~/cuda-run-wrapper/cuda_run.py ~/bin/cudarun 
+\end{Verbatim}
+
+\subsection{Run}
+check whether a daemon if running:
+\begin{Verbatim}[frame=single]
+cudarun daemon.check
+\end{Verbatim}
+
+control daemon:
+\begin{Verbatim}[frame=single]
+cudarun daemon.start
+cudarun daemon.stop
+cudarun daemon.restart
+\end{Verbatim}
+
+Launch a CUDA program using CUDA Run Wrapper:
+\begin{Verbatim}[frame=single]
+cudarun run cuda_program
+\end{Verbatim}
+
+\subsection{Configure}
+There is only one configure file: etc/config.conf.
+\VerbatimInput[frame=single]{etc/config.conf}
+\begin{description}
+  \item[server.addr] The unix domain socket addr server will use. It must be valid unix path, and user should have proper permission to read and write it.
+  \item[server.max-queued-requests] How many client requests can stay in queue.
+  \item[daemon.max-cache-time-interval] How long the the cached device information can survive before it become invalid.
+  \item[daemon.max-cache-request] How many client the daemon can handle before the cached device information become invalid.
+\end{description}
+
+\end{document}

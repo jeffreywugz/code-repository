@@ -1,0 +1,87 @@
+<?xml version="1.0"?> 
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+               xmlns:s="library://ns.adobe.com/flex/spark" 
+               xmlns:mx="library://ns.adobe.com/flex/mx" minWidth="955" minHeight="600"
+               applicationComplete="initApp();">
+  <fx:Style source="css/flex.css"/>
+  <!-- <fx:Script source="hadoop.as"/> -->
+  <fx:Script> 
+    <![CDATA[
+      import ent.*;
+      import mflex.*;
+      import com.adobe.serialization.json.JSON;
+      import mx.binding.utils.*;
+      import mx.core.FlexGlobals;
+      import mx.collections.IList;
+
+      [Bindable]
+      public var rpc:HTTPRpc = new HTTPRpc('/');
+      [Bindable]
+      public var agent:Agent = new Agent();
+      
+      private function initApp():void {
+              FlexGlobals.topLevelApplication.addEventListener(KeyboardEvent.KEY_UP, keyHandler);
+              BindingUtils.bindSetter(function():void{logView.verticalScrollPosition = logView.maxVerticalScrollPosition;}, logView, "maxVerticalScrollPosition");
+      }
+      
+      public function httpCall(expr:String):void {
+              var match:Array = expr.match(/(.+?)\((.*)\)/);
+              if(!match){
+                      Log.traceDebug("httpCall", "illformed input!");
+                      return;
+              }
+              var url:String = match[1];
+              var args:String = match[2];
+              var obj:Object;
+              url = "/" + url.replace(".", "/");
+              args = "{" + args + "}";
+              args = args.replace(/(\w+)=/g,"\"$1\":");
+              obj = JSON.decode(args);
+              Log.traceCall(url, [obj]);
+              rpc = new HTTPRpc(url);
+              BindingUtils.bindSetter(function(result:Object):void{Log.trace(JSON.encode(result) + '\n');}, rpc, "result");
+              rpc.call(obj);
+      }
+
+      private function debugOn():void {
+              currentState = 'debug';
+              shellInput.setFocus();
+      }
+      private function debugOff():void {
+              currentState = 'normal';
+              console.setFocus();
+      }
+      private function debugToggle():void {
+              if(currentState == 'normal'){
+                      debugOn();
+              } else {
+                      debugOff();
+              }
+      }
+      
+      private function keyHandler(event:KeyboardEvent):void {
+              var char:String = String.fromCharCode(event.charCode).toUpperCase();
+              if(!event.ctrlKey)return ;
+              if(char == "C")
+                      debugToggle();
+      }
+      ]]> 
+      </fx:Script>
+      <s:states>
+        <s:State name="debug"/>
+        <s:State name="normal"/>
+      </s:states>
+ 
+    <mx:VDividedBox width="100%" height="100%">
+      <s:Panel width="100%" height="100%" title="Portgroups List">
+        <s:layout><s:VerticalLayout/></s:layout>
+        <s:Label text="Not implemented"/>
+      </s:Panel>
+          
+      <s:Panel id="console" width="100%" height="100%" title="Console" includeIn="debug">
+        <s:layout><s:VerticalLayout/></s:layout>
+        <s:TextInput id="shellInput" width="100%" enter="httpCall(shellInput.text)" styleName="input"/>
+        <mx:TextArea id="logView" width="100%" height="100%" text="{Log.log}" valueCommit="logView.verticalScrollPosition=logView.maxVerticalScrollPosition"  styleName="log"/>
+      </s:Panel>
+    </mx:VDividedBox>
+  </s:Application>
