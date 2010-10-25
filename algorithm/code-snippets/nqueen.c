@@ -43,8 +43,30 @@ int nqueen(int n)
         }
 }
 
+int nqueen_recursive(int* pos, int n, int d)
+{
+        static int total = 0;
+        int i;
+        if(!compatible(pos, d-1))return;
+        if(d == n){
+                printf("%dth solution\n", ++total);
+                print_array(pos, n);
+        }
+        for(i = 0; i < n; i++){
+                pos[d] = i;
+                nqueen_recursive(pos, n, d+1);
+        }
+}
+
+int nqueen2(int n)
+{
+        int pos[N];
+        nqueen_recursive(pos, n, 0);
+}
+
 int main()
 {
         nqueen(8);
+        nqueen2(8);
         return 0;
 }
