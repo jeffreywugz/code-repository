@@ -135,13 +135,51 @@ void quick_sort(int *d, int len)
         _quick_sort(d, 0, len-1);
 }
 
+#define max2(a, e, x, m) ((x<e && a[x]>=a[m])? x: m)
+/*     0
+ *   1  2
+ * 3 4 5 6
+ *  */
+int sift_down(int* h, int s, int e)
+{
+        int m;
+        while(s < e){
+                m = s;
+                m = max2(h, e+1, 2*s+1, m);
+                m = max2(h, e+1, 2*s+2, m);
+                if(s == m)break;
+                swap(h[s], h[m]);
+                s = m;
+        }
+}
+
+void heapify(int* h, int n)
+{
+        int s;
+        for(s = (n-2)/2; s >= 0; s--)
+                sift_down(h, s, n-1);
+}
+
+void heap_sort(int* h, int n)
+{
+        int i;
+        heapify(h, n);
+        for(i = n-1; i > 0; i--){
+                swap(h[0], h[i]);
+                sift_down(h, 0, i-1);
+        }
+}
+
 int main(int argc, char* argv[])
 {
         int i;
         Map sorters[] = {{"bubble", bubble_sort},
                          {"selection", selection_sort},
                          {"insertion", insertion_sort},
-                         {"quick", quick_sort}, {NULL, NULL}};
+                         {"quick", quick_sort},
+                         {"heap", heap_sort},
+                         {NULL, NULL}};
+        Sorter sorter;
         if(argc != 4){
                 fprintf(stderr, "%s sorter n_items repeat\n", argv[0]);
                 fprintf(stderr, "sorters: ");
@@ -150,6 +188,8 @@ int main(int argc, char* argv[])
                 fprintf(stderr, "\n");
                 return 1;
         }
-        test_sorter(map_get(sorters, argv[1]), atoi(argv[2]), atoi(argv[3]));
+        sorter = map_get(sorters, argv[1]);
+        if(!sorter)return -2;
+        test_sorter(sorter, atoi(argv[2]), atoi(argv[3]));
         return 0;
 }
