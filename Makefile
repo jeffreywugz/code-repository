@@ -1,7 +1,7 @@
 cc = gcc
 cflags = -g
 ldflags = -g
-target = python/lock/rwlock.py
+target = python/lock/semaphore.py
 all: test
 test: $(target)
 	(time ./$(target) )
