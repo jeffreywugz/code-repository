@@ -1,7 +1,7 @@
 cc = gcc
 cflags = -g
 ldflags = -g
-target = python/lock/semaphore.py
+target = python/lock/async_queue.py
 all: test
 test: $(target)
 	(time ./$(target) )
