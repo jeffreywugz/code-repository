@@ -1,7 +1,7 @@
 cc = gcc
 cflags = -g
 ldflags = -g
-target = python/lock/async_queue.py
+target = python/snippets/search.py
 all: test
 test: $(target)
 	(time ./$(target) )
