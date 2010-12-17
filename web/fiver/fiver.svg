@@ -1,0 +1,155 @@
+<?xml version="1.0" standalone="no"?>
+<svg width="100%" height="100%" viewBox="0 0 1000 600"  onload="initApp(evt, control)"
+     version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title>Fiver: A Game</title>
+   <defs><linearGradient id="Gradient0">
+        <stop offset="0%" stop-color="BurlyWood"/> <stop offset="25%" stop-color="Peru"/>
+        <stop offset="50%" stop-color="Tan"/>
+        <stop offset="75%" stop-color="Sienna"/> <stop offset="100%" stop-color="SandyBrown"/>
+   </linearGradient></defs>
+  <defs> <radialGradient id="Gradient1"  cx="0.5" cy="0.5" r="0.5" fx="0.30" fy="0.30">
+        <stop offset="0%" stop-color="silver"/>  <stop offset="100%" stop-color="black"/>
+  </radialGradient> </defs>
+  <defs> <radialGradient id="Gradient2"  cx="0.5" cy="0.5" r="0.5" fx="0.30" fy="0.30">
+        <stop offset="0%" stop-color="white"/>  <stop offset="100%" stop-color="silver"/>
+  </radialGradient> </defs>
+
+  <style type="text/css"><![CDATA[
+  .board { fill: url(#Gradient0); stroke: SandyBrown; stroke-width: 3}
+  .grid { stroke: black;}
+  .invisible { fill: transparent;}
+  .type1 { fill: url(#Gradient1);}
+  .type2 { fill: url(#Gradient2);}
+  .button { fill: green; stroke: black; stroke-width: 3;}
+  .button:hover{ fill: grey;}
+  .toggled-button{ fill: Salmon;}
+  .toggled-button:hover{ fill: grey;}
+  .button-label { stroke: white;}
+  ]]></style>
+  
+  <script type="application/javascript;version=1.8"><![CDATA[
+//////////////////////////////////////// Common Routine ////////////////////////////////////////
+String.prototype.format = function() let(dict=arguments[0]) this.replace(/{(\w+)}/g, function(m,k) dict[k])
+function irange(n){ for(let i = 0; i < n; i++)yield i; }
+function range(n) [i for each(i in irange(n))]
+function repeat(n, x) [x for (i in range(n))]
+function bind(obj, attrs) {for (let [k,v] in Iterator(attrs))obj[k]=v; return obj;}
+function sum(seq) seq.reduce(function(v1, v2) v1+v2)
+function min(seq, comp) seq.length > 0 && seq.sort(comp)[0]
+function max(seq, comp) min(seq, function(v1,v2) comp(v2, v1))
+
+var [gSVGNS, gXLINKNS] = ["http://www.w3.org/2000/svg", "http://www.w3.org/1999/xlink"];
+function $(id) document.getElementById(id)
+function $new(name) document.createElementNS(gSVGNS, name)
+function $s(el, dict){ for each([k, v] in Iterator(dict))el.setAttribute(k, v); return el}
+function $n(name, dict) $s($new(name), dict || {})
+
+function pathMove(x, y) "M {x} {y}".format({x:x, y:y})
+function pathHLines(n, L, dy) repeat(n, "h {L} m -{L} {dy}".format({L:L, dy:dy})).join(' ')
+function pathVLines(n, L, dx) repeat(n, "v {L} m {dx} -{L}".format({L:L, dx:dx})).join(' ')
+function pathGrid(x, y, nx, ny, dx, dy) [pathMove(x, y), pathHLines(ny+1, nx*dx, dy), pathMove(x, y), pathVLines(nx+1, ny*dy, dx)].join(' ')
+
+function _setText(t, msg) t.firstChild? t.replaceChild(document.createTextNode(msg), t.firstChild): t.appendChild(document.createTextNode(msg))
+function setText(t, msg) {_setText(t, msg); return t;}
+function toggle(button) button.setAttribute('class', 'toggled-button')
+function untoggle(button) button.setAttribute('class', 'button')
+function newButton(x, y, label, attrs){
+    attrs = bind({class:'button'}, attrs || {});
+    let g = $n('g', bind({class:'button'}, attrs||{}));
+    g.appendChild($n('rect', {x: x, y:y, rx:10, ry:10, width:300, height:40}));
+    g.appendChild(setText($n('text', {x: x+150, y:y+34, 'text-anchor':'middle', 'font-family':"Verdana", 'font-size':"36", class:'button-label'}), label));
+    return g;
+}
+
+//////////////////////////////////////// UI Construct ////////////////////////////////////////
+function initApp(evt, ctrl){
+    var x = 0, y = 0, n = 19, d = 30;
+    var _board = $('board'), _ctrl = $('control');
+    var board = [];
+    
+    _board.appendChild($n('rect', {x: x-d/2, y:y-d/2, width: n*d, height: n*d, class:'board'}));
+    _board.appendChild($n('path', {d: pathGrid(x, y, n-1, n-1, d, d), class:'grid'}));
+    for (let i = 0; i < n; i++){
+        board[i] = [];
+        for(let j = 0; j < n; j++){
+            let chess = $n('circle', {cx: i*d, cy: j*d, r: d/2-1, onclick: 'boardClickHandle(evt, control)'});
+            [chess._x, chess._y] = [i, j];
+            board[i][j] = {x:i, y:j, chess:chess};
+            setState(board[i][j], INVISIBLE);
+            _board.appendChild(chess);
+        }
+    }
+    ctrl.board = board;
+    
+    let menus = [['Re/Start', {_id:'restart'}], ['Back', {_id:'back'}], ['Human First', {_id:'humanFirst'}], ['AI First', {_id:'aiFirst'}]];
+    for (let [i, [label, attrs]] in Iterator(menus)){
+        let button = newButton(0, 50*i, label, {onclick: 'menuClickHandle(evt, control)'});
+        bind(button, attrs);
+        _ctrl.appendChild(button);
+        ctrl[button._id] = button;
+    }
+    let status = $n('text', {x: 50, y: menus.length*50 + 40, fill:'red', 'font-size':28, 'font-faimily':'Helvetica'});
+    _ctrl.appendChild(status);
+    ctrl.status = status;
+    humanFirst(ctrl);
+}
+
+//////////////////////////////////////// Control Logic ////////////////////////////////////////
+var [INVALID, INVISIBLE, HUMAN, AI] = [-2, -1, 0, 1]; // INVALID and INVISIBLE must < 0
+var control = {first: HUMAN, party: HUMAN, end:false, board:[], moves:[]};
+function swapParty(ctrl) ctrl.party = 1 - ctrl.party
+function setStatus(ctrl, msg) setText(ctrl.status, msg);
+function setState(cell, state) {cell._state = state; cell.chess.setAttribute('class', ['type1', 'type2'][state] || 'invisible');}
+function clear(board) [row.map(function (cell) setState(cell, -1)) for each(row in board)]
+function place(ctrl, [x,y]){ setState(ctrl.board[x][y], ctrl.party); ctrl.moves.push([x,y]); swapParty(ctrl); return isEnd(ctrl.board, [x,y]); }
+function unplace(ctrl){ if(!ctrl.moves.length)return; let [x, y] = ctrl.moves.pop();  setState(ctrl.board[x][y], -1); swapParty(ctrl); }
+function endWith(ctrl, msg){ setStatus(ctrl, msg); ctrl.end = true; }
+function enable(ctrl){ setStatus(ctrl, ''); ctrl.end = false; }
+
+function boardClickHandle(evt, ctrl){
+    if(ctrl.end || ctrl.party == AI)return;
+    if(place(ctrl, [evt.currentTarget._x, evt.currentTarget._y]))return endWith(ctrl, "You Win!");
+    if(place(ctrl, ai(ctrl.board)))return endWith(ctrl, "You Lost!");
+}
+
+function restart(ctrl){ clear(ctrl.board); [ctrl.party, ctrl.moves] = [ctrl.first, []]; ctrl.party == AI && place(ctrl, ai1(ctrl.board)); enable(ctrl); }
+function back(ctrl){ if(ctrl.moves.length < 3)return; unplace(ctrl); if(ctrl.party == AI)unplace(ctrl); enable(ctrl); }
+function humanFirst(ctrl){ ctrl.first = HUMAN; toggle(ctrl.humanFirst); untoggle(ctrl.aiFirst); }
+function aiFirst(ctrl){ ctrl.first = AI;  toggle(ctrl.aiFirst); untoggle(ctrl.humanFirst); }
+
+function menuClickHandle(evt, ctrl){
+    let id = evt.currentTarget._id, handlers = {restart: restart, back: back, humanFirst: humanFirst, aiFirst: aiFirst};
+    function error(ctrl, id){ alert("No handler for {id}!".format({id:id})); }
+    (handlers[id] || error)(ctrl, id);
+}
+
+//////////////////////////////////////// AI ////////////////////////////////////////
+function internalBoard(board) [ [cell._state for each(cell in row)] for each(row in board)]
+function getLine(bd, L) [(x >= 0 && x < bd.length && y >= 0 && y < bd[0].length)? bd[x][y]: INVALID for each([x,y] in L)]
+function get4Lines(bd, x, y) {
+    let L = [[-4, -4], [-3, -3], [-2, -2], [-1, -1], [0, 0], [1, 1], [2, 2], [3, 3], [4, 4]];
+    let L4 = [[[x+kx*dx, y+ky*dy] for each([dx,dy] in L)] for each([kx, ky] in [[1,1],[1,-1], [0,1], [1,0]])];
+    return [getLine(bd, L) for each(L in L4)];
+}
+
+function isEnd(board, [x,y]){
+    let bd = internalBoard(board), p = bd[x][y];
+    return p >= 0 && get4Lines(bd, x, y).some(function(L) range(5).some(function(i) L.slice(i, i+5).every(function(c) c == p)))
+}
+
+weight5 = [-1,1,1,3,  1,2,3,10,  1,2,2,4,  3,4,10,16,  1,2,2,4,  2,4,4,16,  3,4,4,16,  10,16,16,128];
+function get5Weight(L, _p) L.every(function(x) x == INVISIBLE || x == _p) && weight5[sum([(1<<i) * (p==_p) for each([i,p] in Iterator(L))])]
+function getLineWeight(L, p){  L[4] = p; return sum([get5Weight(L.slice(i, i+5), p) for each(i in range(5))]);}
+function getPartyWeight(bd, [x,y], p) sum([getLineWeight(L, p) for each(L in get4Lines(bd, x, y))])
+function getWeight(bd, [x, y]) bd[x][y] == INVISIBLE? getPartyWeight(bd, [x,y], HUMAN) + getPartyWeight(bd, [x,y], AI): -1
+
+function ai1(board) [board.length/2, board[0].length/2].map(Math.floor)
+function ai(board){
+    let bd = internalBoard(board);
+    let wbd = [ [[getWeight(bd, [i, j]), [i,j]] for each(j in range(bd[0].length))] for each(i in range(bd.length))];
+    return max(Array.concat.apply([], wbd), function(p1,p2) p1[0]-p2[0])[1];
+}
+   ]]></script>
+  <g id="board" transform="translate(20, 20)"> </g>
+  <g id="control" transform="translate(600, 40)"> </g>
+</svg>
