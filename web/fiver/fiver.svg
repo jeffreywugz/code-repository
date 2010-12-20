@@ -109,7 +109,7 @@ function enable(ctrl){ setStatus(ctrl, ''); ctrl.end = false; }
 function boardClickHandle(evt, ctrl){
     if(ctrl.end || ctrl.party == AI)return;
     if(place(ctrl, [evt.currentTarget._x, evt.currentTarget._y]))return endWith(ctrl, "You Win!");
-    if(place(ctrl, ai(ctrl.board)))return endWith(ctrl, "You Lost!");
+    setTimeout(function () place(ctrl, ai(ctrl.board)) && endWith(ctrl, "You Lost!"), 0);
 }
 
 function restart(ctrl){ clear(ctrl.board); [ctrl.party, ctrl.moves] = [ctrl.first, []]; ctrl.party == AI && place(ctrl, ai1(ctrl.board)); enable(ctrl); }
