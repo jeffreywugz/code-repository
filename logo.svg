@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <radialGradient id="gradient0"  cx="0.5" cy="0.5" r="0.5" fx="0.30" fy="0.30">
+      <stop offset="0%" stop-color="lime"/>  <stop offset="100%" stop-color="teal"/>
+    </radialGradient>
+  </defs>
+  <defs>
+    <filter id="filter0" filterUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
+      <feOffset in="blur" dx="4" dy="4" result="offsetBlur"/>
+      <feMerge><feMergeNode in="offsetBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <g transform="translate(100, 100)">
+  <circle cx="0" cy="0" r="64" fill="url(#gradient0)" filter="url(#filter0)"/>
+  <circle cx="32" cy="32" r="32" fill="url(#gradient0)" filter="url(#filter0)"/>
+  </g>
+</svg>
