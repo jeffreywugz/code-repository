@@ -1,20 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg"
-     xmlns:xlink="http://www.w3.org/1999/xlink">
+     xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 140 140">
   <defs>
     <radialGradient id="gradient0"  cx="0.5" cy="0.5" r="0.5" fx="0.30" fy="0.30">
       <stop offset="0%" stop-color="lime"/>  <stop offset="100%" stop-color="teal"/>
     </radialGradient>
   </defs>
   <defs>
-    <filter id="filter0" filterUnits="userSpaceOnUse" x="-100" y="-100" width="200" height="200">
+    <filter id="filter0" filterUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
       <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
       <feOffset in="blur" dx="4" dy="4" result="offsetBlur"/>
       <feMerge><feMergeNode in="offsetBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <g transform="translate(100, 100)">
-  <circle cx="0" cy="0" r="64" fill="url(#gradient0)" filter="url(#filter0)"/>
-  <circle cx="32" cy="32" r="32" fill="url(#gradient0)" filter="url(#filter0)"/>
+  <g>
+    <circle cx="68" cy="68" r="64" fill="url(#gradient0)" filter="url(#filter0)"/>
+    <circle cx="96" cy="100" r="32" fill="url(#gradient0)" filter="url(#filter0)"/>
+    <text x="14" y="64" font-family="Verdana" font-size="32" fill="yellow" stroke="gold" filter="url(#filter0)">0X2A</text>
   </g>
 </svg>

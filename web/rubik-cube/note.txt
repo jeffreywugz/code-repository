@@ -1,0 +1,15 @@
+(x,y,z) * X(a) = (x, y*cos(a) - z*sin(a), z*cos(a) + y*sin(a))
+       / 1, 0,      0      \
+X(a) = | 0, cos(a), sin(a) |
+       \ 0,-sin(a), cos(a) /
+
+(x,y,z) * Y(b) = (x*cos(b) + z*sin(b), y, z*cos(b) - x*sin(b))
+       / cos(b), 0, -sin(b) \
+Y(b) = | 0,      1, 0       |
+       \ sin(b), 0, cos(b) /
+
+(x,y,z) * Z(c) = (x*cos(c) - y*sin(c), y*cos(c) + x*sin(c), z)
+       / cos(c), sin(c), 0 \
+Z(c) = |-sin(c), cos(c), 0 |
+       \ 0,      0,      1 /
+
