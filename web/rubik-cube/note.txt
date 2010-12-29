@@ -1,15 +1,51 @@
-(x,y,z) * X(a) = (x, y*cos(a) - z*sin(a), z*cos(a) + y*sin(a))
-       / 1, 0,      0      \
-X(a) = | 0, cos(a), sin(a) |
-       \ 0,-sin(a), cos(a) /
+translate(dx, dy, dz):
+(x, y, z, k) * T(dx, dy, dz) = (x+k*dx, y+k*dy, z+k*dz, k)
+                / 1, 0, 0, 0   \
+T(dx, dy, dz) = | 0, 1, 0, 0   |
+                | 0, 0, 1, 0   |
+                \ dx, dy, dz, 1/
 
+scale(sx, sy, sz):
+(x, y, z, k) * S(sx, sy, sz) = (x*sx, y*sy, z*sz, k)
+                / sx, 0, 0, 0 \
+S(sx, sy, sz) = | 0, sy, 0, 0 |
+                | 0, 0, sz, 0 |
+                \ 0, 0, 0, 1  /
+
+
+
+rotateX(a):
+(x,y,z,k) * X(a) = (x, y*cos(a) - z*sin(a), z*cos(a) + y*sin(a), k)
+       / 1, 0,      0,      0 \
+X(a) = | 0, cos(a), sin(a), 0 |
+       | 0,-sin(a), cos(a), 1 |
+       \ 0, 0,      0,      1 /
+        
+rotateY(b):
 (x,y,z) * Y(b) = (x*cos(b) + z*sin(b), y, z*cos(b) - x*sin(b))
-       / cos(b), 0, -sin(b) \
-Y(b) = | 0,      1, 0       |
-       \ sin(b), 0, cos(b) /
+       / cos(b), 0, -sin(b), 0 \
+Y(b) = | 0,      1, 0,       0 |
+       | sin(b), 0, cos(b),  0 |
+       \ 0,      0, 0,      1  /
 
+rotateZ(c):
 (x,y,z) * Z(c) = (x*cos(c) - y*sin(c), y*cos(c) + x*sin(c), z)
-       / cos(c), sin(c), 0 \
-Z(c) = |-sin(c), cos(c), 0 |
-       \ 0,      0,      1 /
+       / cos(c), sin(c), 0, 0 \
+Z(c) = |-sin(c), cos(c), 0, 0 |
+       | 0,      0,      1, 0 |
+       \ 0,      0,      0, 1 /
 
+
+
+
+\---------------\
+|\               \
+| \               \
+|  \               \
+|   \               \
+|    \ --------------\
+\    |              |
+ \   |              |
+  \  |              |
+   \ |              |
+    \|--------------|
