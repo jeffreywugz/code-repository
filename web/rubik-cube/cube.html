@@ -38,6 +38,8 @@
       function polygon(ctx, _ps){
           var ps = _ps.map(xyzk2xy);
           ctx.save();
+          log(_ps.ref[2]/_ps.ref[3]);
+          bind(ctx, {strokeStyle:'black', lineWidth: '3', lineCap: 'round', lineJoin: 'round'});
           ctx.fillStyle = _ps.color;
           ctx.beginPath();
           var [x0, y0] = ps[0];
@@ -55,13 +57,6 @@
 
       //////////////////////////////////////// Cube ////////////////////////////////////////
       var cube0 = [[((i&1)*2 - 1)/2, ((i&2) - 1)/2, ((i&4)/2 - 1)/2, 1] for each(i in irange(8))];
-      function _cubePlanes(ps){
-          var planes = [[0,2,6,4], [1,3,7,5], [0, 1, 5, 4], [2,3,7,6], [0,1,3,2], [4,5,7,6]];
-          var v2planes = [range(6).filter(function(p) planes[p].indexOf(v) != -1) for each(v in range(8))];
-          var top = min(list(Iterator(ps)), function([i1, p1], [i2,p2]) p1[2] > p2[2])[0];
-          return  [[[ps[p] for each(p in planes[plane])], plane] for each(plane in v2planes[top])];
-      }
-      
       function cubePlanes(ps){
           var planes = [[0,2,6,4], [1,3,7,5], [0, 1, 5, 4], [2,3,7,6], [0,1,3,2], [4,5,7,6]];
           return [plane.map(function(x) ps[x]) for each(plane in planes)];
@@ -73,7 +68,10 @@
       function $3(x) [x%3, Math.floor((x/3) % 3), Math.floor(x/9)]
 
       function rubikNew(L, [x0, y0, z0], rubik){
-          var cubes = [matMul(cube0, translate(x, y, z)) for each([x, y, z] in [$3(i).map(function(x) x-1) for each(i in range(27))])];
+          function id2xyz(id) $3(id).map(function(x) x-1)
+          function ref(id) 13 + ($3(id)[rubik.dir] - 1) * [1,3,9][rubik.dir]
+          var pos_ref = [[id2xyz(i), id2xyz(ref(i))] for each(i in range(27))];
+          var cubes = [matMul(cube0, translate(x, y, z)).concat([[rx,ry,rz,1]]) for each([[x, y, z], [rx,ry,rz]] in pos_ref)];
           function rotate(rubik, i) [rotateX, rotateY, rotateZ][rubik.dir](rubik.angles[$3(i)[rubik.dir]]);
           cubes = [matMul(ps, rotate(rubik, i)) for each([i, ps] in Iterator(cubes))];
           return [matMul(cube, place(L, [x0, y0, z0], rubik.abc)) for each(cube in cubes)];
@@ -85,31 +83,40 @@
           return colors[getColorId(rubik.permute[cubeId], planeId)];
       }
       
-      function rubikRotate(rubik, ctx, i, d){ rubik.abc[i] += d; rubikRedraw(rubik, ctx); }
-      
       function rubikSort(rubik, planes){
-          function maxZ(plane) min(plane.map(function([x,y,z,k])z/k), function(z1, z2) z1>z2)
-          return planes.sort(function(p1, p2) maxZ(p1) < maxZ(p2));
+          function maxZ(plane) min(plane.map(function([x,y,z,k])z/k), function(z1, z2) z2-z1)
+          function refZ(plane) plane.ref[2]/plane.ref[3]
+          return planes.sort(function(p1, p2) (refZ(p1) == refZ(p2))? (maxZ(p1) - maxZ(p2)): (refZ(p1) - refZ(p2)));
       }
       
       function rubikRedraw(rubik, ctx){
           var [L, x0, y0, z0] = [100, 300, 300, 0];
           ctx.clearRect(0, 0, 600, 600);
-          var planes = [[bind(p, {cubeId:i, planeId:j, color:rubikGetColor(rubik, i, j)}) for each([j, p] in Iterator(cubePlanes(cube)))] for each([i, cube] in Iterator(rubikNew(L, [x0, y0, z0], rubik)))];
+          var planes = [[bind(p, {ref:cube[8], color:rubikGetColor(rubik, i, j)}) for each([j, p] in Iterator(cubePlanes(cube)))] for each([i, cube] in Iterator(rubikNew(L, [x0, y0, z0], rubik)))];
           polygons(ctx, rubikSort(rubik, Array.concat.apply([], planes)));
       }
+
+      function rubikGRotate(rubik, dir, delta) rubik.abc[dir] += delta
+      function rubikSetDir(rubik, dir) [rubik.dir, rubik.angles] = [dir, [0, 0, 0]]
+      function rubikRotate(rubik, pos, delta) rubik.angles[pos] += delta
       
+      function rubikKeyHandler(rubik, ctx, key){
+          function mkRotater(i, d) function() rubik.abc[i] += d;
+          log(key);
+          var handlers = {W:mkRotater(0, 0.1), S:mkRotater(0, -0.1),
+              A:mkRotater(2, 0.1), D:mkRotater(2, -0.1),
+              Q:mkRotater(1, -0.1), E:mkRotater(1, 0.1),
+              X:function() rubikSetDir(rubik,0), Y:function() rubikSetDir(rubik, 1), Z:function() rubikSetDir(rubik, 2),
+              H:function() rubikRotate(rubik, 0, 0.1), L:function() rubikRotate(rubik, 0, -0.1),
+              J:function() rubikRotate(rubik, 2, 0.1), K:function() rubikRotate(rubik, 2, -0.1), };
+         (handlers[key] || function() null)();
+         rubikRedraw(rubik, ctx);
+      }
       //////////////////////////////////////// Init ////////////////////////////////////////
       function initApp(canvas) {
           var ctx = canvas.getContext('2d');
-          ctx.strokeStyle = "black";
           rubikRedraw(rubik, ctx);
-          bindKey(top, 'w', function(e) rubikRotate(rubik, ctx, 0, 0.1));
-          bindKey(top, 's', function(e) rubikRotate(rubik, ctx, 0, -0.1));
-          bindKey(top, 'a', function(e) rubikRotate(rubik, ctx, 2, 0.1));
-          bindKey(top, 'd', function(e) rubikRotate(rubik, ctx, 2, -0.1));
-          bindKey(top, 'q', function(e) rubikRotate(rubik, ctx, 1, -0.1));
-          bindKey(top, 'e', function(e) rubikRotate(rubik, ctx, 1, 0.1));
+          top.addEventListener('keypress', function(e) rubikKeyHandler(rubik, ctx, String.fromCharCode(e.charCode).toUpperCase()), false);
       }
     </script>
   </head>
