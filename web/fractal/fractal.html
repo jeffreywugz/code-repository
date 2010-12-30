@@ -7,6 +7,7 @@
       function irange(n){ for(let i = 0; i < n; i++)yield i; }
       function range(n) [i for each(i in irange(n))]
       function repr(obj) JSON.stringify(obj)
+      function bind(obj, attrs) {for (let [k,v] in Iterator(attrs))obj[k]=v; return obj;}
       function log() window.console &&  console.log.apply(null, arguments)
       function $(id) document.getElementById(id)
       

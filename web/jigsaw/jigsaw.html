@@ -1,0 +1,83 @@
+<html>
+  <head>
+    <title>Jigsaw</title>
+    <!-- <script type="application/javascript;version=1.8" src="common.js"></script> -->
+    <script type="application/javascript;version=1.8">
+      //////////////////////////////////////// Common ////////////////////////////////////////
+      function swap(a, i, j) [a[i], a[j]] = [a[j], a[i]]
+      function irange(n){ for(let i = 0; i < n; i++)yield i; }
+      function range(n) [i for each(i in irange(n))]
+      function repr(obj) JSON.stringify(obj)
+      function bind(obj, attrs) {for (let [k,v] in Iterator(attrs))obj[k]=v; return obj;}
+      function log() window.console &&  console.log.apply(null, arguments)
+      function $(id) document.getElementById(id)
+      var floor = Math.floor;
+
+      function solve(permutes){
+          return [[0,1], [1,2], [2,3]];
+      }
+      
+      function _redraw(permutes, ctx, img, L){
+          for each([i,j] in Iterator(permutes)){
+              ctx.drawImage(img, j%4 * L, floor(j/4) * L, L, L, i%4 * L, floor(i/4) * L, L, L);
+              ctx.strokeStyle = 'blue';
+              ctx.strokeRect(i%4 * L, floor(i/4) * L, L, L);
+          }
+          var k = permutes.indexOf(15);
+          ctx.strokeStyle = 'red';
+          ctx.strokeRect(k%4 * L, floor(k/4) * L, L, L);
+      }
+
+      
+      function Jigsaw(ctx, img, L, info) bind(this, {ctx:ctx, img:img, L:L, info:info}) && this.reset()
+      Jigsaw.prototype.draw = function() _redraw(this.permute, this.ctx, this.img, this.L)
+      Jigsaw.prototype.swap = function([i, j]) swap(this.permute, i, j)
+      Jigsaw.prototype.swap1 = function(i) this.swap([this.permute.indexOf(15), i])
+      Jigsaw.prototype.msg = function(str) this.info.innerHTML = str
+      
+      Jigsaw.prototype.reset = function(){
+          bind(this, {permute: range(16), solved: false, solution:[], path: 0});
+          this.msg("");
+          this.draw();
+      }
+      
+      Jigsaw.prototype.forward = function(){
+          if(!this.solved){
+              this.msg('Solving...');
+              bind(this, {editable: false, solution:solve(this.permute)});
+              this.solved = true;
+              this.msg('Solved. The jigsaw is not editable now.');
+          }
+          if(!this.solution) return this.msg('no solution!');
+          this.path < this.solution.length && this.swap(this.solution[this.path++]);
+          this.draw();
+      }
+      
+      Jigsaw.prototype.backward = function(){
+          this.path > 0 && this.swap(this.solution[--this.path]);
+          this.draw();
+      }
+      
+      function clickHandle(jigsaw, e){
+          if(jigsaw.solved)return;
+          var [x,y] = [(e.clientX - e.target.offsetLeft)/jigsaw.L, (e.clientY - e.target.offsetTop)/jigsaw.L].map(floor);
+          jigsaw.swap1(x + y*4);
+          jigsaw.draw();
+      }
+      
+      var jigsaw;
+      function initApp(canvas, img, L, info){
+        var ctx = canvas.getContext('2d');
+        jigsaw = new Jigsaw(ctx, img, L, info);
+        jigsaw.draw();
+        canvas.addEventListener('click', function(e) clickHandle(jigsaw, e), false);
+      }
+
+    </script>
+  </head>
+  <body onload="initApp($('canvas'), $('img'), 100, $('info'))">
+    <div><input type="submit" value="reset" onclick="jigsaw.reset()"/> <input type="submit" value="forward" onclick="jigsaw.forward()"/><input type="submit" value="backward" onclick="jigsaw.backward()"/></div>
+    <div><canvas id="canvas" width="400" height="400" style="background:black">Your browser does not support HTML5 Canvas.</canvas><img id="img" src="img.jpg"/></div>
+    <pre id="info">init.</pre
+  </body>
+</html>
