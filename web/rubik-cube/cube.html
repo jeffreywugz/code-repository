@@ -38,7 +38,6 @@
       function polygon(ctx, _ps){
           var ps = _ps.map(xyzk2xy);
           ctx.save();
-          log(_ps.ref[2]/_ps.ref[3]);
           bind(ctx, {strokeStyle:'black', lineWidth: '3', lineCap: 'round', lineJoin: 'round'});
           ctx.fillStyle = _ps.color;
           ctx.beginPath();
