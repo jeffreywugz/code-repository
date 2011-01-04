@@ -4,7 +4,8 @@
     <!-- <script type="application/javascript;version=1.8" src="common.js"></script> -->
     <script type="application/javascript;version=1.8">
       //////////////////////////////////////// Common ////////////////////////////////////////
-      function swap(a, i, j) [a[i], a[j]] = [a[j], a[i]]
+      function swap(a, i, j){[a[i], a[j]] = [a[j], a[i]]; return a;}
+      function sum(seq) seq.reduce(function(v1, v2) v1+v2)
       function irange(n){ for(let i = 0; i < n; i++)yield i; }
       function range(n) [i for each(i in irange(n))]
       function repr(obj) JSON.stringify(obj)
@@ -13,30 +14,60 @@
       function $(id) document.getElementById(id)
       var floor = Math.floor;
 
-      function solve(permutes){
-          return [[0,1], [1,2], [2,3]];
+      function search(root, target){
+          function getPath(node){
+              var [path, parent] = [[], node]
+              while(parent){ path.unshift(parent);  parent = parent.parent; }
+              return path;
+          }
+          var [open, visited] = [[root], {}];
+          while(open.length){
+              let cur = open.shift();
+              if(visited[cur.state])continue;
+              visited[cur.state] = true;
+              if(cur.isTarget(target))return getPath(cur);
+              open = open.concat(cur.children());
+              open = open.sort(function(n1,n2) n1.cost() - n2.cost());
+          }
+          return [];
       }
       
-      function _redraw(permutes, ctx, img, L){
-          for each([i,j] in Iterator(permutes)){
+      function spacePos(permutation) permutation.indexOf(15)
+      function nReverse(seq) sum([sum([x > y for each(y in seq.slice(i))]) for each([i, x] in Iterator(seq))])
+      function solvable(permutation) let(tab = [0,1,0,1, 1,0,1,0, 0,1,0,1, 1,0,1,0]) (nReverse(permutation) + tab[spacePos(permutation)]) % 2 == 0
+      function solve(permutation) solvable(permutation) && let(path=search(new JigsawState(null, permutation))) path.map(function(x)x.permutation)
+      
+      function JigsawState(parent, permutation){
+          bind(this, {state:permutation, parent:parent, permutation:permutation, pos:spacePos(permutation)});
+      }
+
+      JigsawState.prototype.restCost = function() sum([i != j for each([i, j] in Iterator(this.permutation))])
+      JigsawState.prototype.cost = function() this.restCost() + (this.parent || this.parent.cost())
+      JigsawState.prototype.isTarget = function() this.restCost() == 0
+      JigsawState.prototype.children = function(){
+          var moves = [[1,4], [1,-1,4], [1,-1,4], [-1,4],    [1,4,-4], [1,-1,4,-4], [1,-1,4,-4], [-1,4,-4],
+                  [1,4,-4], [1,-1,4,-4], [1,-1,4,-4], [-1,4,-4],    [1,-4], [1,-1,-4], [1,-1,-4], [-1,-4]];
+          return [new JigsawState(this, swap(this.permutation.slice(0), this.pos, this.pos+i)) for each(i in moves[this.pos])];
+      }
+      
+      function drawJigsaw(permutation, ctx, img, L){
+          for each([i,j] in Iterator(permutation)){
               ctx.drawImage(img, j%4 * L, floor(j/4) * L, L, L, i%4 * L, floor(i/4) * L, L, L);
               ctx.strokeStyle = 'blue';
               ctx.strokeRect(i%4 * L, floor(i/4) * L, L, L);
           }
-          var k = permutes.indexOf(15);
+          var k = spacePos(permutation);
           ctx.strokeStyle = 'red';
           ctx.strokeRect(k%4 * L, floor(k/4) * L, L, L);
       }
-
       
       function Jigsaw(ctx, img, L, info) bind(this, {ctx:ctx, img:img, L:L, info:info}) && this.reset()
-      Jigsaw.prototype.draw = function() _redraw(this.permute, this.ctx, this.img, this.L)
-      Jigsaw.prototype.swap = function([i, j]) swap(this.permute, i, j)
-      Jigsaw.prototype.swap1 = function(i) this.swap([this.permute.indexOf(15), i])
+      Jigsaw.prototype.draw = function() drawJigsaw(this.permutation, this.ctx, this.img, this.L)
+      Jigsaw.prototype.swap = function(i) swap(this.permutation, spacePos(this.permutation), i)
       Jigsaw.prototype.msg = function(str) this.info.innerHTML = str
       
       Jigsaw.prototype.reset = function(){
-          bind(this, {permute: range(16), solved: false, solution:[], path: 0});
+          bind(this, {permutation: range(16), solved: false, solution:[], path: 0});
           this.msg("");
           this.draw();
       }
@@ -44,24 +75,23 @@
       Jigsaw.prototype.forward = function(){
           if(!this.solved){
               this.msg('Solving...');
-              bind(this, {editable: false, solution:solve(this.permute)});
-              this.solved = true;
+              bind(this, {solved: true, solution:solve(this.permutation)});
               this.msg('Solved. The jigsaw is not editable now.');
           }
-          if(!this.solution) return this.msg('no solution!');
-          this.path < this.solution.length && this.swap(this.solution[this.path++]);
+          if(!this.solution.length) return this.msg('no solution!');
+          (this.path < this.solution.length-1) && (this.permutation = this.solution[++this.path]);
           this.draw();
       }
       
       Jigsaw.prototype.backward = function(){
-          this.path > 0 && this.swap(this.solution[--this.path]);
+          (this.path > 0) && (this.permutation = this.solution[--this.path]);
           this.draw();
       }
       
       function clickHandle(jigsaw, e){
           if(jigsaw.solved)return;
           var [x,y] = [(e.clientX - e.target.offsetLeft)/jigsaw.L, (e.clientY - e.target.offsetTop)/jigsaw.L].map(floor);
-          jigsaw.swap1(x + y*4);
+          jigsaw.swap(x + y*4);
           jigsaw.draw();
       }
       
