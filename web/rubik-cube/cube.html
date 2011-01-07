@@ -4,14 +4,21 @@
     <!-- <script type="application/javascript;version=1.8" src="common.js"></script> -->
     <script type="application/javascript;version=1.8">
       //////////////////////////////////////// Common ////////////////////////////////////////
-      function irange(n){ for(let i = 0; i < n; i++)yield i; }
-      function range(n) [i for each(i in irange(n))]
-      function list(iters) [x for each(x in iters)]
+      function product2(A, B) Array.concat.apply([], [[x.concat([y]) for each(y in B)] for each(x in A)])
+      function product(seq) seq.reduce(product2, [[]])
+      function rproduct(seq) product(seq.reverse()).map(function(i) i.reverse())
+      function dict(pairs){ var result = {}; for each([k,v] in pairs) result[k] = v;  return result;}
+      function dictSlice(d, keys) dict([[x, d[x]] for each(x in keys)])
       function min(seq, comp) seq.length > 0 && seq.sort(comp)[0]
       function sum(seq) seq.reduce(function(v1, v2) v1+v2)
       function repr(obj) JSON.stringify(obj)
-      function bind(obj, attrs) {for (let [k,v] in Iterator(attrs))obj[k]=v; return obj;}
-      String.prototype.format = function(dict) this.replace(/{(\w+)}/g, function(m,k) dict[k])
+      function bind(obj, attrs) {for ([k,v] in Iterator(attrs))obj[k]=v; return obj;}
+      function watch(obj, keys, f){
+          for each(let x in keys)
+              obj.watch(x, function(i,o,n){ let attrs = dictSlice(obj, keys); attrs[i] = n; f(attrs); return n});
+      }
+      String.prototype.format = function(dict) this.replace(/\${(\w+)}/g, function(m,k) dict[k]);
+      Number.prototype.__iterator__ = function(){ for ( let i = 0; i < this; i++ )yield i;};
       
       function log() window.console &&  console.log.apply(null, arguments)
       function $(id) document.getElementById(id)
@@ -19,20 +26,21 @@
       function bindKey(w, key, handler) w.addEventListener('keypress', function(e) isHotKey(e, key) && handler(e), false);
       
       //////////////////////////////////////// Transform ////////////////////////////////////////
-      function transpose(A) [[row[i] for each(row in A)]  for (i in A[0])]
-      function innerProduct(A, B) sum([A[i]*B[i] for(i in A)])
-      function transform(v, B) [innerProduct(v, col) for each(col in transpose(B))]
-      function matMul(Am, Bm) [transform(row, Bm) for each(row in Am)]
+      function transpose(A) [[row[i] for each([_,row] in Iterator(A))]  for(i in A[0].length)]
+      function innerProduct(A, B) sum([A[i]*B[i] for(i in A.length)])
+      function transform(v, B) transpose(B).map(function(col) innerProduct(v, col))
+      function matMul(A, B) A.map(function(row) transform(row, B))
       function xyzk2xy([x, y, z, k]) [x/k, y/k]
 
       var [sin, cos] = [Math.sin, Math.cos];
-      function translate(dx, dy, dz) [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [dx, dy, dz, 1]]
-      function scale(sx, sy, sz) [[sx, 0, 0, 0], [0, sy, 0, 0], [0, 0, sz, 0], [0, 0, 0, 1]]
+      function translate([dx, dy, dz]) [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [dx, dy, dz, 1]]
+      function scale([sx, sy, sz]) [[sx, 0, 0, 0], [0, sy, 0, 0], [0, 0, sz, 0], [0, 0, 0, 1]]
       function rotateX(a) [[1, 0, 0, 0], [0, cos(a), sin(a), 0], [0, -sin(a), cos(a), 0], [0, 0, 0, 1]]
       function rotateY(b) [[cos(b), 0, -sin(b), 0], [0, 1, 0, 0], [sin(b), 0, cos(b), 0], [0, 0, 0, 1]]
       function rotateZ(c) [[cos(c), sin(c), 0, 0], [-sin(c), cos(c), 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-      function rotate(a, b, c) [rotateX(a), rotateY(b), rotateZ(c)].reduce(matMul)
-      function place(L, [x0, y0, z0], [a, b, c]) [scale(L, L, L), rotate(a, b, c), translate(x0, y0, z0)].reduce(matMul)
+      function rotate([a, b, c]) [rotateX(a), rotateY(b), rotateZ(c)].reduce(matMul)
+      function projection(D) [[1,0,0,0], [0,1,0,0], [0,0,1,1.0/D], [0,0,0,1]]
+      function place(L, xyz) matMul(scale([L, L, L]), translate(xyz))
       
       //////////////////////////////////////// Polygon ////////////////////////////////////////
       function polygon(ctx, _ps){
@@ -43,7 +51,7 @@
           ctx.beginPath();
           var [x0, y0] = ps[0];
           ctx.moveTo(x0, y0); 
-          for each([x, y] in ps.slice(1))ctx.lineTo(x, y);
+          for each(let [x, y] in ps.slice(1))ctx.lineTo(x, y);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
@@ -54,83 +62,122 @@
           planes.map(function(p) polygon(ctx, p));
       }
 
-      //////////////////////////////////////// Cube ////////////////////////////////////////
-      var cube0 = [[((i&1)*2 - 1)/2, ((i&2) - 1)/2, ((i&4)/2 - 1)/2, 1] for each(i in irange(8))];
-      function cubePlanes(ps){
-          var planes = [[0,2,6,4], [1,3,7,5], [0, 1, 5, 4], [2,3,7,6], [0,1,3,2], [4,5,7,6]];
-          return [plane.map(function(x) ps[x]) for each(plane in planes)];
-      }
-      
       //////////////////////////////////////// RubikRenderer Utilities ////////////////////////////////////////
-      function $3(x) [x%3, Math.floor((x/3) % 3), Math.floor(x/9)]
-      
-      function rubik2cubes(L, [x0, y0, z0], abc, dir, angles){
-          function id2xyz(id) $3(id).map(function(x) x-1)
-          function ref(id) 13 + ($3(id)[dir] - 1) * [1,3,9][dir]
-          var pos_ref = [[id2xyz(i), id2xyz(ref(i))] for each(i in range(27))];
-          var cubes = [matMul(cube0, translate(x, y, z)).concat([[rx,ry,rz,1]]) for each([[x, y, z], [rx,ry,rz]] in pos_ref)];
-          function rotate(dir, angles, i) [rotateX, rotateY, rotateZ][dir](angles[$3(i)[dir]]);
-          cubes = [matMul(ps, rotate(dir, angles, i)) for each([i, ps] in Iterator(cubes))];
-          return [matMul(cube, place(L, [x0, y0, z0], abc)) for each(cube in cubes)];
+      function cubePlane([px, py, pz]){
+          function bin2gray(i) (i^(i<<1)) >> 1
+          var vertexes = [let(j=bin2gray(i))[(j&1)*2-1, (j&2)-1, ((j&4)>>1)-1,1] for(i in 8)];
+          return [xyzk for each(xyzk in vertexes) if(innerProduct(xyzk, [px, py, pz, 0])==1)];
       }
       
-      function rubikGetColorId(permute, cubeId, planeId){
-          return $3(permute[cubeId])[Math.floor(planeId/2)] == (planeId%2 * 2)? planeId: 6;
+      function rubikPlaneIds(){
+          var cubes = rproduct([[-1,0,1], [-1,0,1], [-1,0,1]]);
+          var planes = [[-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1]];
+          return product([cubes, planes]);
+      }
+
+      function rubikPlane([cId, pId], abc, axle, angles){
+          function refPoint(cId){ let p = [0, 0, 0, 1]; p[axle] = cId[axle]; return p;}
+          var axleRotate = [rotateX, rotateY, rotateZ][axle](angles[cId[axle] + 1]);
+          let plane = [cubePlane(pId), place(0.5, cId), axleRotate, rotate(abc)].reduce(matMul);
+          return bind(plane, {ref: transform(refPoint(cId), rotate(abc))});
       }
       
-      function rubikSortPlanes(planes){
+      function rubikPlaneSorter(p1,p2){
           function maxZ(plane) min(plane.map(function([x,y,z,k])z/k), function(z1, z2) z2-z1)
-          function refZ(plane) plane.ref[2]/plane.ref[3]
-          return planes.sort(function(p1, p2) (refZ(p1) == refZ(p2))? (maxZ(p1) - maxZ(p2)): (refZ(p1) - refZ(p2)));
+          function refZ(plane) let([x,y,z,k]=plane.ref) z/k
+          return (refZ(p1) == refZ(p2))? (maxZ(p1) - maxZ(p2)): (refZ(p1) - refZ(p2));
+      }
+
+      function rubikPlaneColoring([cId, pId], permutation){
+          return innerProduct(innerProduct(cId, pId) == 1? pId: [0,0,0], [1,2,3]) + 3;
+      }
+
+      function rubikColoredPlane(id, abc, axle, angles, permutation){
+          return bind(rubikPlane(id, abc, axle, angles), {color:rubikPlaneColoring(id, permutation)});
       }
       
-      function rubikDraw(ctx, L, xyz0, abc, dir, angles, permutation, cm){
-          var cubes = rubik2cubes(L, xyz0, abc, dir, angles);
-          function planeNew(p, ref, cId, pId) bind(p, {ref:ref, color:cm[rubikGetColorId(permutation, cId, pId)]})
-          var planes = [[planeNew(p, cube[8], i, j) for each([j, p] in Iterator(cubePlanes(cube)))] for each([i, cube] in Iterator(cubes))];
-          polygons(ctx, rubikSortPlanes(Array.concat.apply([], planes)));
+      function rubikRender(abc, axle, angles, permutation){
+          return [rubikColoredPlane(id, abc, axle, angles, permutation) for each(id in rubikPlaneIds())].sort(rubikPlaneSorter);
       }
       
-      function makeRubikRenderer(ctx, L, xyz0, cm){
-          cm = cm || ['white', 'red', 'blue', 'orange', 'green', 'yellow', 'grey'];
-          return function render(permute, abc, dir, angles){
-              ctx.clearRect(0, 0, 600, 600); 
-              rubikDraw(ctx, L, xyz0, abc, dir, angles, permute, cm);
+      function makeRubikRenderer(ctx, L, xyz, D, cm){
+          cm = cm || ['white', 'red', 'blue', 'gray', 'orange', 'green', 'yellow'];
+          return function render(abc, axle, angles, permutation){
+              ctx.clearRect(0, 0, ctx.width, ctx.height); 
+              let planes = rubikRender(abc, axle, angles, permutation);
+              planes = [bind([p, place(L, xyz)].reduce(matMul), {color:cm[p.color]}) for each(p in planes)]
+              polygons(ctx, planes);
           }
       }
       
-      //////////////////////////////////////// Rubik ////////////////////////////////////////
-      function Rubik(render, permute, abc, dir, angles){
-          bind(this, {render: render, permute: permute || range(27), abc: abc || [0,0,0] , dir: dir || 0,
-               angles: angles || [0.4, 0, 0.3]});
+      //////////////////////////////////////// Permute ////////////////////////////////////////
+      function permuteMul(A, B) [A[bi] for each(bi in B)]
+      
+      function rubikPermute(dir, level, LR){
+          var rotate = {R:[6,3,0, 7,4,1, 8,5,2], L:[2,5,8, 1,4,7, 0,3,6]}[LR || 'R'];
+          function to27(i, dir, level){ let x=$3(i); x.splice(dir, 0, level); return $27(x); }
+          var rotate27 = dict([[to27(i,dir,level), to27(j, dir, level)] for each([i,j] in Iterator(rotate))])
+          return [i in rotate27? rotate27[i]: i for(i in 27)];
       }
-      Rubik.prototype.draw = function() this.render(this.permute, this.abc, this.dir, this.angles)
-      Rubik.prototype.gRotate = function(dir, delta) this.abc[dir] += delta
-      Rubik.prototype.setDir = function(dir) [this.dir, this.angles] = [dir, [0, 0, 0]]
-      Rubik.prototype.rotate = function(pos, delta) this.angles[pos] += delta
+
+      function rubikPermuted(permute, dir, level, LR) permuteMul(permute, rubikPermute(dir, level, LR))
+      function rubikIdentityPermutation() dict([x,x] for each(x in rubikPlaneIds()))
+      //////////////////////////////////////// Rubik ////////////////////////////////////////
+      function Rubik(render, permutation, abc, axle, angles){
+          permutation = permutation || rubikIdentityPermutation();
+          abc = abc || [0.2,-0.2,0.2];
+          axle = axle || 0;
+          angles = angles || [0, 0, 0];
+          bind(this, {render: render, permutation: permutation, abc: abc , axle: axle, angles: angles});
+      }
+      Rubik.prototype.draw = function() this.render(this.abc, this.axle, this.angles, this.permutation);
+      Rubik.prototype.resetView = function() this.abc = [0.5, 0.5, 0.5];
+      Rubik.prototype.viewRotate = function(axle, delta) this.abc[axle] += delta;
+      Rubik.prototype.setAxle = function(axle) [this.axle, this.angles] = [axle, [0, 0, 0]];
+      Rubik.prototype.rotate = function(pos, delta) this.angles[pos] += delta;
+      Rubik.prototype.permute = function(level, LR) this.angles[level] += {L:-0.1, R:0.1}[LR];
+      //Rubik.prototype.permute = function(level, LR) this.permutation = rubikPermuted(this.permutation, this.axle, level, LR);
       
       //////////////////////////////////////// UI ////////////////////////////////////////
       function keyHandler(rubik, key){
           var handlers = {
-              W:function() rubik.gRotate(0, 0.1), S:function() rubik.gRotate(0, -0.1),
-              A:function() rubik.gRotate(2, 0.1), D:function() rubik.gRotate(2, -0.1),
-              Q:function() rubik.gRotate(1, -0.1), E:function() rubik.gRotate(1, 0.1),
-              X:function() rubik.setDir(0), Y:function() rubik.setDir(1), Z:function() rubik.setDir(2),
-              H:function() rubik.rotate(0, 0.1), L:function() rubik.rotate(0, -0.1),
-              J:function() rubik.rotate(2, 0.1), K:function() rubik.rotate(2, -0.1), };
+              R:function() rubik.resetView(),
+              H:function() rubik.permute(2, 'R'), L:function() rubik.permute(2, 'L'),
+              J:function() rubik.permute(0, 'R'), K:function() rubik.permute(0, 'L'),
+              X:function() rubik.setAxle(0), Y:function() rubik.setAxle(1), Z:function() rubik.setAxle(2),
+              W:function() rubik.viewRotate(0, 0.1), S:function() rubik.viewRotate(0, -0.1),
+              A:function() rubik.viewRotate(1, -0.1), D:function() rubik.viewRotate(1, 0.1),
+              Q:function() rubik.viewRotate(2, 0.1), E:function() rubik.viewRotate(2, -0.1),
+              };
          (handlers[key] || function() null)();
          rubik.draw();
       }
       
-      function initApp(canvas) {
-          var ctx = canvas.getContext('2d');
-          var rubik = new Rubik(makeRubikRenderer(ctx, 100, [300,300,0]));
+      var rubik;
+      function initApp(canvas, msg) {
+          var ctx = bind(canvas.getContext('2d'), {width:600,height:600});
+          rubik = new Rubik(makeRubikRenderer(ctx, 100, [300,300,0], -10000));
+          watch(rubik, ['dir', 'permutation'], function(o) msg.innerHTML = "dir: ${dir};\npermutation:${permutation}".format(o));
           rubik.draw();
           top.addEventListener('keypress', function(e) keyHandler(rubik, String.fromCharCode(e.charCode).toUpperCase()), false);
       }
     </script>
   </head>
-  <body onload="initApp($('canvas'))">
-    <canvas id="canvas" width="600" height="600">Your browser does not support HTML5 Canvas.</canvas>
+  <body onload="initApp($('canvas'), $('msg'))">
+    <table><tr>
+      <td>
+      <canvas id="canvas" width="600" height="600">Your browser does not support HTML5 Canvas.</canvas>
+    </td>
+    <td>
+    <pre style="color:blue">
+R: reset;
+X, Y, Z: set axle for rotate rubik;
+H, L: rotate upper level blocks;
+J, K: rotate lower leve blocks;
+W, S, A, D, Q, E: rotate the view point;
+    </pre>
+    <pre id="msg" style="color:red">msg here.</pre>
+  </td>
+    </tr></table>
   </body>
 </html>
