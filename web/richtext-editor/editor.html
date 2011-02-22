@@ -1,0 +1,30 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" >
+  <head>
+    <title>Rich Text Editor</title>
+    <script type="text/javascript">
+      function doFormat(cmd) {
+          document.execCommand(cmd, null, null);
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Testing contenteditable</h1>
+    <hr />
+    <button onclick="doFormat('bold');"><strong>B</strong></button>
+    <button onclick="doFormat('italic');"><em>I</em></button>
+
+    <button onclick="doFormat('underline');"><span style="text-decoration:underline">U</span></button>
+    <hr />
+    <div id="editor" contenteditable="true" style="height:200px; border:1px solid black">
+      <table style="border:1px solid black">
+        <tr style="border:1px solid black">
+          <td>name</td><td>id</td><td>addr</td>
+        </tr>
+        <tr style="border:1px solid black">
+          <td></td><td></td><td></td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>
