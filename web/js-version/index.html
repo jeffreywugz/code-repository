@@ -1,0 +1,74 @@
+<html>
+  <head>
+    <title>Browser Detection and Javascript Support Test </title>
+    <style type="text/css">
+table, th, td { border: 1px solid black; }
+th { background: black; color: white; }
+.error { color: red; }
+</style>
+  </head>
+  <body>
+    <noscript>Your Browser does not support Javascript!</noscript>
+    <h2>Browser Info</h2>
+    <script type="text/javascript">
+      document.write("<table><tr><th>Attribute</th><th>Value</th></tr>" +
+      "<tr><td>Browser CodeName</td><td>" + navigator.appCodeName + "</td></tr>" +
+      "<tr><td>Browser Name</td><td>" + navigator.appName + "</td></tr>"+
+      "<tr><td>Browser Version</td><td>" + navigator.appVersion + "</td></tr>"+
+      "<tr><td>Cookies Enabled</td><td>" + navigator.cookieEnabled + "</td></tr>"+
+      "<tr><td>Platform</td><td>" + navigator.platform + "</td></tr>"+
+      "<tr><td>User-agent header</td><td>" + navigator.userAgent + "</td></tr>"+
+      "</table>")
+    </script>
+    <h2>Javascript Source Include Test</h2>
+    <table><tr><th>Included By</th><th>Result</th></tr>
+      <tr><td>text/javascript</td><td> <script type="text/javascript">document.write("X");</script></td></tr>
+      <tr><td>application/javascript</td><td> <script type="application/javascript">document.write("X");</script></td></tr>
+      <tr><td>application/javascript;version=1.6</td><td> <script type="application/javascript;version=1.6">document.write("X");</script></td></tr>
+      <tr><td>application/javascript;version=1.7</td><td> <script type="application/javascript;version=1.7">document.write("X");</script></td></tr>
+      <tr><td>application/javascript;version=1.8</td><td> <script type="application/javascript;version=1.8">document.write("X");</script></td></tr>
+    </table>
+    <h2>Javascript Language Feature Test</h2>
+    <h3>Default Javascript</h3><div id="features"></div>
+    <h3>Javascript1.6</h3><div id="features1.6"></div>
+    <h3>Javascript1.7</h3><div id="features1.7"></div>
+    <h3>Javascript1.8</h3><div id="features1.8"></div>
+    <script type="text/javascript">
+      function safe_eval(code, eval){
+          try{
+             return "<td>" + eval(code) + "</td>";
+          }catch(e){
+             return "<td class=\"error\">" + e + "</td>";
+          }
+      }
+      function test(doc, code, eval){
+          return "<tr><td>" + doc + "</td><td>" + code+ "</td>" + safe_eval(code, eval) + "</tr>";
+      }
+      function test_all(suites, eval){
+          var output = "<table><tr><th>Feature</th><th>Test Code</th><th>Result</th>";
+          for(var i=0; i < suites.length; i++){
+              output += test(suites[i][0], suites[i][1], eval);
+          }
+          output += "</tr></table>";
+          return output;
+      }
+      var suites = [
+      ["Array reduce", "[1,2,3].reduce(function(x,y){return x+y;})"],
+      ["Generator", "function (){ yield true; }"],
+      ["Iterator", "Iterator([1,2,3])"],
+      ["for each", "for each(x in [1,2,3]);"],
+      ["Array Comprehensions", "[i*2 for each(i in [1,2,3])]"],
+      ["let statement", "let(x=1,y=2){ x+y;}"],
+      ["let expression", "let(x=1,y=2)x+y"],
+      ["let definition", "let x=1;"],
+      ["Destructuring assignment", "[x,y]=[1,2];"],
+      ["Expression Closures", "function(x) x * x"],
+      ["Generator Expressions", "(2*x for each(x in [1,2,3]))"],
+      ];
+      document.getElementById("features").innerHTML = test_all(suites, eval);
+    </script>
+    <script type="application/javascript;version=1.6">document.getElementById("features1.6").innerHTML = test_all(suites, function(x){return eval(x);});</script>
+    <script type="application/javascript;version=1.7">document.getElementById("features1.7").innerHTML = test_all(suites, function(x){return eval(x);});</script>
+    <script type="application/javascript;version=1.8">document.getElementById("features1.8").innerHTML = test_all(suites, function(x){return eval(x);});</script>
+  </body>
+</html>
