@@ -2,7 +2,7 @@
 
 int main(int argc, char *argv[])
 {
-        printf ("ILP: %d, %d, %d\n", sizeof(int), sizeof(long), sizeof(void*));
+        printf ("ILPLL: %d, %d, %d, %d\n", sizeof(int), sizeof(long), sizeof(void*), sizeof(long long));
         return 0;
 }
 

@@ -7,8 +7,8 @@
       function keyHandler(rubik, key){
           var handlers = {
               R:function() rubik.resetView(), T:function() rubik.resetPermutation(),
-              H:function() rubik.permute(2, 1), L:function() rubik.permute(2, -1),
-              J:function() rubik.permute(0, 1), K:function() rubik.permute(0, -1),
+              H:function() rubik.permute(1, 1), L:function() rubik.permute(1, -1),
+              J:function() rubik.permute(-1, 1), K:function() rubik.permute(-1, -1),
               X:function() rubik.setAxle(0), Y:function() rubik.setAxle(1), Z:function() rubik.setAxle(2),
               W:function() rubik.viewRotate(0, 0.1), S:function() rubik.viewRotate(0, -0.1),
               A:function() rubik.viewRotate(1, -0.1), D:function() rubik.viewRotate(1, 0.1),
@@ -35,7 +35,7 @@
     </td>
     <td>
     <pre style="color:blue">
-R: reset;
+R: reset view; T: reset permutation;
 X, Y, Z: set axle for rotate rubik;
 H, L: rotate upper level blocks;
 J, K: rotate lower leve blocks;

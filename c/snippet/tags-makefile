@@ -1,0 +1,8 @@
+
+find-src-files = find . -name '*.c' -o -name '*.cpp' -o -name '*.h'
+all: etags cscope
+etags:
+	etags `$(find-src-files)`
+cscope:
+	$(find-src-files) > cscope.files
+	cscope -b -q
