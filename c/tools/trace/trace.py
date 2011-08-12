@@ -68,6 +68,18 @@ def write(path, content):
     with open(path, 'w') as f:
         f.write(content)
         
+html_escape_table = {
+    "&": "&amp;",
+    '"': "&quot;",
+    "'": "&apos;",
+    ">": "&gt;",
+    "<": "&lt;",
+    }
+
+def html_escape(text):
+    """Produce entities within text."""
+    return "".join(html_escape_table.get(c,c) for c in text)
+
 def getitem(seq, i, default=None):
     return i in range(len(seq)) and seq[i] or default
 
@@ -110,17 +122,22 @@ def trace2plain(trace, exe, maxdepth=2):
     return '\n'.join('%d %s => %s'%(count, func_repr(caller), func_repr(callee)) for (caller, callee), count in plain(trace, exe, maxdepth).items())
 
 def trace2dot(trace, exe, maxdepth=2):
-    def call_repr(callee):
-        return callee and r'\n'.join(callee)
+    def func_repr(func):
+        return func and '@'.join(func)
+    def call_link2dot(caller, callee, count):
+        edge = '''"%(caller)s"->"%(callee)s"[label="%(count)d", fontsize=%(fontsize)d, penwidth=%(linewidth)d];
+ "%(callee)s"[shape=plaintext, style=filled, bgcolor=lightgray,
+   label=< <font face="monospace" color="black" point-size="%(fontsize)d">%(escaped_func)s</font>
+   <br/><font color="navy" point-size="%(smallfontsize)d">%(escaped_lineno)s</font> >];'''
+        func, lineno = callee
+        return edge %dict(caller=func_repr(caller), callee=func_repr(callee), count=count, escaped_func=html_escape(func), escaped_lineno=html_escape(lineno), 
+                          fontsize=10*math.log(3*count), smallfontsize=8*math.log(3*count), linewidth=math.log(3*count))
     digraph = '''
 digraph G {
 node[shape=box, style=filled];
 rankdir=LR;
 %s
 };'''
-    def call_link2dot(caller, callee, count):
-        return '"%(caller)s"->"%(callee)s"[label=%(count)d, penwidth=%(linewidth)d, fontsize=%(fontsize)d];"%(callee)s"[fontsize=%(fontsize)d];'%dict(
-            caller=call_repr(caller), callee=call_repr(callee), count=count, linewidth=math.log(3*count), fontsize=10*math.log(3*count))
     return digraph% '\n'.join(call_link2dot(caller, callee, count) for (caller, callee),count in plain(trace, exe, maxdepth).items())
 
 def create_trace_so(dir):
@@ -129,14 +146,14 @@ def create_trace_so(dir):
 
 def traced_call(trace_file, trace_so, args):
     os.putenv('LD_PRELOAD', '%s/trace.so'%(cwd))
-    os.putenv('TRACE', '%s.trace'% trace_file)
+    os.putenv('TRACE', trace_file)
     call(args)
     os.putenv('LD_PRELOAD', '')
 
 def trace_term_plain(trace_content, exefile, outfile):
     write(outfile, trace2plain(trace_content, exefile))
 
-def trace_term_png(trace_content, exefile, outfile):
+def trace_term_dot(trace_content, exefile, outfile):
     write(outfile, trace2dot(trace_content, exefile))
     
 def trace_term_png(trace_content, exefile, outfile):
