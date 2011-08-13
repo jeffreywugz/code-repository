@@ -1,6 +1,6 @@
 exe = hello
 trace = ./trace.py
-all: $(exe).trace
+all: trace.so
 %.plain: %.trace %.exe
 	$(reduce) $*.exe plain <$< >$@
 %.dot: %.trace %.exe
