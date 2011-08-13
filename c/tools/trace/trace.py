@@ -2,8 +2,8 @@
 '''
 Usages:
 export CC="gcc -finstrument-functions -g" && $(CC) a.c -o a.out
-TRACE=trace.png ./trace.py ./a.out
 TRACE=trace.plain ./trace.py ./a.out
+TRACE=trace.svg EXEFILE=./a.out ./trace.py
 '''
 trace_so_source = r"""
 #include <sys/mman.h>
@@ -58,6 +58,7 @@ import math
 from subprocess import call, Popen, PIPE, STDOUT
 from collections import Counter
 import array
+MAX_NAME_LEN = 40
 
 def info(msg):
     sys.stderr.write(msg)
@@ -85,6 +86,9 @@ html_escape_table = {
 def html_escape(text):
     """Produce entities within text."""
     return "".join(html_escape_table.get(c,c) for c in text)
+
+def html_escape2(text):
+    return html_escape(html_escape(text))
 
 def getitem(seq, i, default=None):
     return i in range(len(seq)) and seq[i] or default
@@ -117,33 +121,42 @@ def call_chains(trace):
         return enter_exit, enter_exit == 'E' and (parent, (func, lineno)) or parent[0]
     return [chain for enter_exit, chain in accmulate(call_link, trace, (None, (None,None))) if enter_exit == 'E']
 
+def safe_atoi(str, default=0):
+    try:
+        return int(str)
+    except Exception:
+        return default
+    
 def resolve_counter_names(counters, exe, maxdepth=2):
     name_map = addr2name([callee for (caller, callee) in counters], exe, maxdepth)
-    return dict(((name_map[caller], name_map[callee]), count) for (caller, callee), count in counters.items() if caller)
+    topn = safe_atoi(os.getenv('TOPN'), 100)
+    return dict(((caller, callee), (count, name_map[caller], name_map[callee])) for (caller, callee), count in counters.most_common(topn) if caller)
 
 def trace2plain(counters, exe, maxdepth=2):
     def func_repr(func):
         return func and '@'.join(func)
-    return '\n'.join('%d %s => %s'%(count, func_repr(caller), func_repr(callee)) for (caller, callee), count in resolve_counter_names(counters, exe, maxdepth).items())
+    return '\n'.join('%d %s => %s'%(count, func_repr(caller), func_repr(callee)) for (_caller, _callee), (count, caller, callee) in resolve_counter_names(counters, exe, maxdepth).items())
 
 def trace2dot(trace, exe, maxdepth=2):
     def func_repr(func):
         return func and '@'.join(func)
-    def call_link2dot(caller, callee, count):
-        edge = '''"%(caller)s"->"%(callee)s"[label="%(count)d", fontsize=%(fontsize)d, penwidth=%(linewidth)d];
- "%(callee)s"[shape=plaintext, style=filled, bgcolor=lightgray,
+    def call_link2dot(_caller, _callee, caller, callee, count):
+        edge = '''x%(_caller)d->x%(_callee)s[label="%(count)d", fontsize=%(fontsize)d, penwidth=%(linewidth)d];
+ x%(_callee)d[shape=plaintext, style=filled, bgcolor=lightgray,
    label=< <font face="monospace" color="black" point-size="%(fontsize)d">%(escaped_func)s</font>
    <br/><font color="navy" point-size="%(smallfontsize)d">%(escaped_lineno)s</font> >];'''
         func, lineno = callee
-        return edge %dict(caller=func_repr(caller), callee=func_repr(callee), count=count, escaped_func=html_escape(func), escaped_lineno=html_escape(lineno), 
-                          fontsize=10*math.log(3*count), smallfontsize=8*math.log(3*count), linewidth=math.log(3*count))
+        func, lineno = func[:MAX_NAME_LEN], lineno[:2*MAX_NAME_LEN]
+        return edge %dict(_caller=_caller, _callee=_callee,
+                          count=count, escaped_func=html_escape2(func), escaped_lineno=html_escape2(lineno), 
+                          fontsize=5*math.log(3*count), smallfontsize=2*math.log(3*count), linewidth=math.log(3*count))
     digraph = '''
 digraph G {
 node[shape=box, style=filled];
 rankdir=LR;
 %s
 };'''
-    return digraph% '\n'.join(call_link2dot(caller, callee, count) for (caller, callee),count in resolve_counter_names(trace, exe, maxdepth).items())
+    return digraph% '\n'.join(call_link2dot(_caller, _callee, caller, callee, count) for (_caller, _callee),(count, caller, callee) in resolve_counter_names(trace, exe, maxdepth).items())
 
 def create_trace_so(dir):
     write('%s/trace.c'%(dir), trace_so_source)
@@ -182,6 +195,9 @@ def trace_term_dot(counters, exefile, outfile):
 def trace_term_png(counters, exefile, outfile):
     print popen('dot -Tpng -o %s'% outfile, input=trace2dot(counters, exefile))
 
+def trace_term_svg(counters, exefile, outfile):
+    print popen('dot -Tsvg -o %s'% outfile, input=trace2dot(counters, exefile))
+    
 def create_trace_file(trace_file, trace_so, args):
     p = traced_call('%s.trace'% trace_basename, '%s/trace.so'% cwd, sys.argv[1:])
     signal.signal(signal.SIGINT, lambda signo, frame: os.kill(p.pid, signal.SIGINT))
@@ -196,7 +212,7 @@ if __name__ == '__main__':
     cwd = os.path.dirname(os.path.realpath(__file__))
     os.path.exists('%s/trace.so'%(cwd)) or create_trace_so(cwd) or err('create "%s/trace.so" failed.\n'%(cwd))
     sys.argv[1:] and (create_trace_file('%s.trace'% trace_basename, '%s/trace.so'% cwd, sys.argv[1:]) or err('create "%s.trace" failed.\n'% trace_basename))
-    exefile = sys.argv[1]
+    exefile = os.getenv('EXEFILE') or (len(sys.argv) > 1 and sys.argv[1] or err('not provide exefile to resolve func names.\n'))
     counters = get_trace_counters('%s.trace'% trace_basename) or err('not valid "%s.trace".\n'% trace_basename)
     _term = globals().get('trace_term_%s'%(trace_term)) or (lambda counters, exefile, outfile: err('no term defined for %s.'% trace_term))
     _term(counters, exefile, trace_output)
