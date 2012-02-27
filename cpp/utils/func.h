@@ -13,6 +13,7 @@ struct CBuf {
     buf_ = buf;
     len_ = len;
     pos_ = 0;
+    return 0;
   }
 };
 

@@ -19,7 +19,7 @@
 #include "common/ob_tablet_info.h"
 #include "common/utility.h"
 #include "ob_utils.h"
-#include "utils/sh_utils.h"
+#include "sh.h"
 
 const int64_t MAX_STR_LEN = 1<<12;
 const int64_t MAX_N_COLUMNS = 128;

@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include "func.h"
+#include "str.h"
 
 int sh(const char* cmd);
 char* popen(char* buf, const int64_t len, int64_t& pos, const char* cmd);

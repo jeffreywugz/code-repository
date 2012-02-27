@@ -1,4 +1,4 @@
-#include "utils/common.h"
+#include "common.h"
 #include "ob_utils.h"
 
 const char* obj_type_repr(const ObObjType _type)
