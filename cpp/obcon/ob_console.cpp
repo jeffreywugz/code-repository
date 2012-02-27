@@ -18,8 +18,9 @@
 #include "ob_client_helper.h"
 #include "common/ob_tablet_info.h"
 #include "common/utility.h"
-#include "utils.h"
-#include "reg_utils.h"
+#include "ob_utils.h"
+#include "utils/sh_utils.h"
+
 const int64_t MAX_STR_LEN = 1<<12;
 const int64_t MAX_N_COLUMNS = 128;
 const int64_t MAX_REPLICAS_COUNT = 1<<12;
@@ -294,7 +295,7 @@ int ObConsole::init(ObDataBuffer& buf, const char* cmd, const char*& result)
   const char* pat = "init +([a-zA-Z0-9._:]+) ([a-zA-Z0-9._:]+)";
   char* rs_addr = NULL;
   char* ups_addr = NULL;
-  (OB_SUCCESS == (err = reg_parse(pat, cmd, buf, &rs_addr, &ups_addr)))
+  (OB_SUCCESS == (err = reg_parse2(pat, cmd, buf, &rs_addr, &ups_addr)))
     && (OB_SUCCESS == (err = do_init(buf, rs_addr, ups_addr, result)));
   return err;
 }
@@ -304,7 +305,7 @@ int ObConsole::desc(ObDataBuffer& buf, const char* cmd, const char*& result)
   int err = OB_SUCCESS;
   const char* pat = "desc +([0-9A-Za-z_*]*)";
   const char* table = NULL;
-  (OB_SUCCESS == (err = reg_parse(pat, cmd, buf, &table)))
+  (OB_SUCCESS == (err = reg_parse2(pat, cmd, buf, &table)))
     && (OB_SUCCESS == (err = do_desc(buf, table, result)));
   return err;
 }
@@ -316,7 +317,7 @@ int ObConsole::select(ObDataBuffer& buf, const char* cmd, const char*& result)
   const char* columns = NULL;
   const char* table = NULL;
   const char* server = NULL;
-  (OB_SUCCESS == (err = reg_parse(pat, cmd, buf, &columns, &table, &server)))
+  (OB_SUCCESS == (err = reg_parse2(pat, cmd, buf, &columns, &table, &server)))
     && (OB_SUCCESS == (err = do_select(buf, table, columns, server, result)));
   return err;
 }
@@ -327,7 +328,7 @@ int ObConsole::create(ObDataBuffer& buf, const char* cmd, const char*& result)
   const char* pat = "create +table +([a-zA-Z0-9_]+) +at +([,.a-zA-Z0-9_:]+)";
   const char* table = NULL;
   const char* servers = NULL;
-  (OB_SUCCESS == (err = reg_parse(pat, cmd, buf, &table, &servers)))
+  (OB_SUCCESS == (err = reg_parse2(pat, cmd, buf, &table, &servers)))
     && (OB_SUCCESS == (err = do_create(buf, table, servers, result)));
   return err;
 }
@@ -340,7 +341,7 @@ int ObConsole::report(ObDataBuffer& buf, const char* cmd, const char*& result)
   const char* start_key = NULL;
   const char* end_key = NULL;
   const char* server = NULL;
-  (OB_SUCCESS == (err = reg_parse(pat, cmd, buf, &table_name, &start_key, &end_key, &server)))
+  (OB_SUCCESS == (err = reg_parse2(pat, cmd, buf, &table_name, &start_key, &end_key, &server)))
     && (OB_SUCCESS == (err = do_report(buf, table_name, start_key, end_key, server, result)));
   return err;
 }

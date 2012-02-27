@@ -1,15 +1,5 @@
-#include "utils.h"
-
-const char* str_bool(bool b)
-{
-  return b? "true" : "false";
-}
-
-int min(int64_t x, int64_t y)
-{
-  return x < y? x: y;
-}
-
+#include "utils/common.h"
+#include "ob_utils.h"
 
 const char* obj_type_repr(const ObObjType _type)
 {
@@ -379,7 +369,7 @@ int to_server(ObServer& server, const char* spec)
   }
   else 
   {
-    strncpy(ip, spec, min(p - spec, sizeof(ip)));
+    strncpy(ip, spec, min(p - spec, (int64_t)sizeof(ip)));
     port = atoi(p+1);
   }
   if (OB_SUCCESS != err)
@@ -491,3 +481,9 @@ int parse_servers(const char* tablet_servers, const int max_n_servers, int& n_se
   return err;
 }
 
+#ifdef __TEST_OB_UTILS__
+int main(int argc, char *argv[])
+{
+  return 0;
+}
+#endif
