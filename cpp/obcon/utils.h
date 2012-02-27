@@ -5,13 +5,10 @@
 
 using namespace oceanbase::common;
 const int MAX_STR_BUF_SIZE = 1<<12;
-const char* str_bool(bool b);
-int min(int64_t x, int64_t y);
 const char* obj_type_repr(const ObObjType _type);
 int to_obj(ObObj& obj, const int64_t v);
 int to_obj(ObObj& obj, const ObString& v);
 int to_obj(ObObj& obj, const char* v);
-char* mystrsep(char** str, const char* delim);
 
 char* str_escape(char* out, const char* in, const int64_t len);
 
