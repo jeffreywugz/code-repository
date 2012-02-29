@@ -21,4 +21,4 @@ objs= $(patsubst %.cpp,%.o,$(srcs))
 lib$(target).a: $(objs)
 $(target).exe: $(objs)
 clean:
-	rm *.o *.exe
+	rm -f *.o *.exe
