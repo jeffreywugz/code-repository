@@ -1,10 +1,20 @@
 cc = gcc
 cxx = g++
-cflags = -lpthread -std=c99 -O3
-cxxflags = -lpthread -O3
+cflags = -lpthread -g -std=c99 -Wall -Werror
+cxxflags = -lpthread -g -Wall -Werror
 target = rbtree
-all: $(target).exe
-	(./$< 4 | ./plot.py |tee a.dot |dot -Tpng -o a.png ) && feh a.png
+#all: insert_delete_flow-16.view
+all: profile
+%.view: %.png
+	feh $<
+%.png: %.dot
+	dot $< -Tpng -o $@
+%.dot: n=$(lastword $(subst -, ,$*))
+%.dot: cmd=$(firstword $(subst -, ,$*))
+%.dot: $(target).exe
+	./$< dump_$(cmd) $(n) | ./plot.py |tee $@
+profile: $(target).exe
+	./$< $@ 655360
 %.exe: %.c
 	$(cc) $(cflags) -o $@ $<
 %.exe: %.cpp
