@@ -29,7 +29,7 @@ namespace oceanbase
         // read()成功，可以保证读取的一定是最后一次reset()之后放入缓冲区的数据，
         // 并且读取期间没有再次调用reset()。
         int init(const int64_t buf_len, char* buf);
-        // start_pos_, end_pos_, 只会递增，折回到实际缓冲区开始也不重置为0，
+        // last_reset_pos_, start_pos_, end_pos_, next_end_pos_ 只会递增，折回到实际缓冲区开始也不重置为0，
         // 如果缓冲区无限大，[last_reset_pos_, end_pos) 之间的数据有效，不过实际缓冲区有限，
         // 有效数据范围是 [max(start_pos_, end_pos-buf_len_), end_pos)
         //
