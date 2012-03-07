@@ -73,7 +73,8 @@ void* producer_sync_with_pthread_cond(void* arg)
     pthread_mutex_lock(&mutex);
     gen_task();
     counter++;
-    pthread_cond_signal(&cond);
+    if (counter == 1)
+      pthread_cond_signal(&cond);
     pthread_mutex_unlock(&mutex);
   }
 }
