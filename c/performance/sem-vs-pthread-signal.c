@@ -88,6 +88,7 @@ int64_t test_sem()
   sem = sem_open(file_name, O_CREAT, S_IRWXU, value);
   assert(sem != SEM_FAILED);
   sem_unlink(file_name);
+  counter = 0;
   pthread_create(&thread1, NULL, consumer_sync_with_sem, NULL);
   pthread_create(&thread2, NULL, producer_sync_with_sem, NULL);
 
@@ -101,6 +102,7 @@ int64_t test_pthread_cond()
 {
   pthread_t thread1;
   pthread_t thread2;
+  counter = 0;
   pthread_create(&thread1, NULL, consumer_sync_with_pthread_cond, NULL);
   pthread_create(&thread2, NULL, producer_sync_with_pthread_cond, NULL);
 

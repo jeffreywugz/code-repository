@@ -11,11 +11,11 @@
  *   yuanqi <yuanqi.xhf@taobao.com>
  *     - some work details if you want
  */
-
-#include "tbsys.h"
-#include "common/ob_malloc.h"
+#include "common/ob_log_entry.h"
 #include "common/utility.h"
-#include "ob_fixed_ring_buffer.h"
+#include "tbsys.h"
+#include "ob_log_buffer.h"
+#include "ob_ups_log_utils.h"
 
 using namespace oceanbase::common;
 
@@ -23,237 +23,282 @@ namespace oceanbase
 {
   namespace updateserver
   {
-    int copy_from_ring_buf(char* dest, const char* src, const int64_t ring_buf_len,
-                           const int64_t start_pos, const int64_t len)
-    {
-      int err = OB_SUCCESS;
-      int64_t bytes_to_boundary = 0;
-      if (NULL == dest || NULL == src || 0 >= ring_buf_len
-          || len > ring_buf_len || 0 > start_pos)
-      {
-        err = OB_INVALID_ARGUMENT;
-        TBSYS_LOG(ERROR, "copy_from_ring_buf(dest=%p, src=%p[%ld], range=[%ld,+%ld]): invalid argument",
-                  dest, src, ring_buf_len, start_pos, len);
-      }
-      else
-      {
-        bytes_to_boundary = ring_buf_len - start_pos % ring_buf_len;
-        memcpy(dest, src + start_pos % ring_buf_len, min(len, bytes_to_boundary));
-        if (bytes_to_boundary < len)
-        {
-          memcpy(dest + bytes_to_boundary, src, len - bytes_to_boundary);
-        }
-      }
-      return err;
-    }
-
-    int copy_to_ring_buf(char* dest, const char* src, const int64_t ring_buf_len,
-                         const int64_t start_pos, const int64_t len)
-    {
-      int err = OB_SUCCESS;
-      int64_t bytes_to_boundary = 0;
-      if (NULL == dest || NULL == src || 0 >= ring_buf_len || 0 > len || len > ring_buf_len
-          || 0 > start_pos)
-      {
-        err = OB_INVALID_ARGUMENT;
-        TBSYS_LOG(ERROR, "copy_to_ring_buf(dest=%p, src=%p[%ld], range=[%ld,+%ld]): invalid argument",
-                  dest, src, ring_buf_len, start_pos, len);
-      }
-      else
-      {
-        bytes_to_boundary = ring_buf_len - start_pos % ring_buf_len;
-        memcpy(dest +  start_pos % ring_buf_len, src, min(len, bytes_to_boundary));
-        if (bytes_to_boundary < len)
-        {
-          memcpy(dest, src + bytes_to_boundary, len - bytes_to_boundary);
-        }
-      }
-      return err;
-    }
-
-    bool is_in_range(const int64_t pos, int64_t start, int64_t end)
-    {
-      return pos >= start && pos < end;
-    }
-
-    bool is_point_valid_in_ring_buf(const int64_t pos, const int64_t start_pos, const int64_t end_pos, const int64_t buf_len)
-    {
-      return is_in_range(pos, max(start_pos, end_pos-buf_len), end_pos);
-    }
-
-    ObFixedRingBuffer::ObFixedRingBuffer() : start_pos_(0), end_pos_(0), next_end_pos_(0), start_id_(0), end_id_(0), buf_len_(0), buf_(NULL)
+    ObLogBuffer::ObLogBuffer(): end_id_(0)
     {}
 
-    ObFixedRingBuffer::~ObFixedRingBuffer()
+    ObLogBuffer::~ObLogBuffer()
     {}
 
-    bool ObFixedRingBuffer::is_inited() const
-    {
-      return NULL != buf_ && 0 < buf_len_;
-    }
-
-    int ObFixedRingBuffer::check_state() const
-    {
-      return is_inited()? OB_SUCCESS: OB_NOT_INIT;
-    }
-
-    int ObFixedRingBuffer::init(const int64_t buf_len, char* buf)
+    int ObLogBuffer::reset()
     {
       int err = OB_SUCCESS;
-      if (is_inited())
-      {
-        err = OB_INIT_TWICE;
-      }
-      else if (NULL == buf || 0 >= buf_len)
-      {
-        err = OB_INVALID_ARGUMENT;
-      }
-      else
-      {
-        buf_ = buf;
-        buf_len_ = buf_len;
-      }
-      return err;
-    }
-
-    int64_t ObFixedRingBuffer::get_start_pos() const
-    {
-      return start_pos_;
-    }
-
-    int64_t ObFixedRingBuffer::get_end_pos() const
-    {
-      return end_pos_;
-    }
-
-    int64_t ObFixedRingBuffer::get_next_end_pos() const
-    {
-      return next_end_pos_;
-    }
-
-    int ObFixedRingBuffer::reset()
-    {
-      int err = OB_SUCCESS;
-      int64_t next_end_pos = end_pos_;
+      TBSYS_LOG(INFO, "reset()");
       if (OB_SUCCESS != (err = check_state()))
       {
         TBSYS_LOG(ERROR, "check_state()=>%d", err);
-      }
-      else if (__sync_bool_compare_and_swap(&next_end_pos_, next_end_pos, next_end_pos + 1))
-      {
-        err = OB_EAGAIN;
       }
       else
       {
         end_id_ = 0;
-        start_id_ = 0;
-        start_pos_ = next_end_pos_;
-        last_reset_pos_ = next_end_pos_;
-        end_pos_ = next_end_pos_;
+        start_pos_ = end_pos_;
       }
       return err;
     }
 
-    // 允许len == 0
-    int ObFixedRingBuffer::append(const int64_t pos, const int64_t start_id, const int64_t end_id,
-                                  const char* buf, const int64_t len)
+    int64_t ObLogBuffer::get_start_id() const
     {
       int err = OB_SUCCESS;
-      bool granted = false;
+      int64_t next_pos = 0;
+      int64_t log_id = 0;
+      int64_t start_id = 0;
+      if (OB_SUCCESS != (err = get_next_entry(start_pos_, next_pos, log_id))
+        && OB_DATA_NOT_SERVE != err)
+      {
+        TBSYS_LOG(ERROR, "get_next_entry(pos=%ld)=>%d", start_pos_, err);
+      }
+      else if (OB_SUCCESS == err)
+      {
+        start_id = log_id;
+      }
+      return start_id;
+    }
+
+    int64_t ObLogBuffer::get_end_id() const
+    {
+      return end_id_;
+    }
+
+    int ObLogBuffer::dump_for_debug() const
+    {
+      int err = OB_SUCCESS;
+      TBSYS_LOG(INFO, "pos=[%ld, %ld), id=[%ld, %ld)", start_pos_, end_pos_, get_start_id(), end_id_);
+      ObRingDataBuffer::dump_for_debug();
+      return err;
+    }
+
+    int ObLogBuffer::append_log(const int64_t pos, const int64_t start_id, const int64_t end_id, const char* buf, const int64_t len)
+    {
+      int err = OB_SUCCESS;
       if (OB_SUCCESS != (err = check_state()))
       {
         TBSYS_LOG(ERROR, "check_state()=>%d", err);
       }
-      else if (NULL == buf || 0 > len)
+      else if (NULL == buf || 0 > len || 0 >= start_id || start_id > end_id)
       {
         err = OB_INVALID_ARGUMENT;
-        TBSYS_LOG(ERROR, "append(buf=%p[%ld]): invalid argument", buf, len);
+        TBSYS_LOG(ERROR, "append_log(range=[%ld,%ld], buf=%p[%ld]): invalid argument", start_id, end_id, buf, len);
       }
-      else if (len > buf_len_)
-      {
-        err = OB_BUF_NOT_ENOUGH;
-        TBSYS_LOG(WARN, "append(len[%ld] > buf_len_[%ld])", len , buf_len_);
-      }
-      else if (pos != end_pos_ || !__sync_bool_compare_and_swap(&next_end_pos_, pos, pos + len))
-      {
-        err = OB_EAGAIN;
-        TBSYS_LOG(DEBUG, "append(pos=%ld, next_end_pos=%ld): another appender working.", pos, next_end_pos_);
-      }
-      else
-      {
-        granted = true;
-      }
-      if (OB_SUCCESS == err &&
-          end_id_ > 0 && end_id_ != start_id)
+      else if (end_id_ > 0 && end_id_ != start_id)
       {
         err = OB_DISCONTINUOUS_LOG;
-        TBSYS_LOG(WARN, "log not continuous: end_id_[%ld] != start_id[%ld]", end_id_, start_id);
       }
-      else if (OB_SUCCESS != (err = copy_to_ring_buf(buf_, buf, buf_len_, end_pos_, len)))
+      else if (OB_SUCCESS != (err = append(pos, buf, len)))
       {
-        TBSYS_LOG(ERROR, "copy_to_ring_buf(ring_buf=%p[%ld]+%ld, buf=%p[%ld])=>%d", buf_, buf_len_, end_pos_, buf, len, err);
+        if (OB_BUF_NOT_ENOUGH != err)
+        {
+          TBSYS_LOG(ERROR, "append(pos=%ld, buf=%p[%ld])=>%d", get_end_pos(), buf, len, err);
+        }
+        else
+        {
+          err = OB_NEED_RETRY;
+        }
       }
       else
       {
         end_id_ = end_id;
-        if (0 >= start_id_)
-        {
-          start_id_ = start_id;
-        }
-      }
-
-      if (!granted)
-      {}
-      else if (OB_SUCCESS != err)
-      {
-        if (__sync_bool_compare_and_swap(&next_end_pos_, pos+len, end_pos_))
-        {
-          err = OB_ERR_UNEXPECTED;
-        }
-      }
-      else
-      {
-        end_pos_ += len;
       }
       return err;
     }
 
-    bool ObFixedRingBuffer::is_pos_valid(const int64_t pos) const
-    {
-      return is_point_valid_in_ring_buf(pos, start_pos_, end_pos_, buf_len_);
-    }
-
-    // 允许len == 0
-    int ObFixedRingBuffer::read(const int64_t pos, char* buf, const int64_t len, int64_t& read_count) const
+    int ObLogBuffer:: get_next_entry(const int64_t pos, int64_t& next_pos, int64_t& log_id) const
     {
       int err = OB_SUCCESS;
+      int64_t copy_count = 0;
+      ObLogEntry log_entry;
+      char log_entry_buf[sizeof(ObLogEntry)];
+      int64_t log_entry_buf_pos = 0;
       if (OB_SUCCESS != (err = check_state()))
       {
         TBSYS_LOG(ERROR, "check_state()=>%d", err);
       }
-      else if (NULL == buf || 0 > len)
+      else if (OB_SUCCESS != (err = read(pos, log_entry_buf, sizeof(log_entry_buf), copy_count)))
+      {
+        if (OB_FOR_PADDING == err)
+        {
+          next_pos += copy_count;
+        }
+        else if (OB_DATA_NOT_SERVE != err)
+        {
+          TBSYS_LOG(ERROR, "read(pos=%ld, buf=%p[%ld])=>%d", pos, log_entry_buf, sizeof(log_entry_buf), err);
+        }
+      }
+      else if (copy_count < (int64_t)sizeof(log_entry_buf))
+      {
+        err = OB_DATA_NOT_SERVE;
+      }
+      else if (OB_SUCCESS != (err = log_entry.deserialize(log_entry_buf, sizeof(log_entry_buf), log_entry_buf_pos)))
+      {
+        TBSYS_LOG(ERROR, "log_entry.deserialize(%p[%ld])=>%d", log_entry_buf, sizeof(log_entry_buf), err);
+      }
+      else
+      {
+        log_id = log_entry.seq_;
+        next_pos = pos + log_entry.get_serialize_size() + log_entry.get_log_data_len();
+      }
+      return err;
+    }
+
+    int ObLogBuffer::seek(const int64_t log_id, const int64_t advised_pos, int64_t& real_pos) const
+    {
+      int err = OB_SUCCESS;
+      int64_t cur_id = 0;
+      int64_t next_pos = 0;
+      if (OB_SUCCESS != (err = check_state()))
+      {
+        TBSYS_LOG(ERROR, "check_state()=>%d", err);
+      }
+      else if (log_id >= end_id_)
+      {
+        err = OB_DATA_NOT_SERVE;
+      }
+      else
+      {
+        real_pos = max(advised_pos, start_pos_);
+      }
+      while(OB_SUCCESS == err)
+      {
+        if (OB_SUCCESS != (err = get_next_entry(real_pos, next_pos, cur_id)))
+        {
+          if (OB_FOR_PADDING == err)
+          {
+            err = OB_SUCCESS;
+            real_pos = next_pos;
+          }
+          else if (OB_DATA_NOT_SERVE != err)
+          {
+            TBSYS_LOG(ERROR, "get_next_entry(pos=%ld)=>%d", real_pos, err);
+          }
+        }
+        else if (log_id < cur_id)
+        {
+          err = OB_DATA_NOT_SERVE;
+        }
+        else if (log_id == cur_id)
+        {
+          break;
+        }
+        else
+        {
+          real_pos = next_pos;
+        }
+      }
+      return err;
+    }
+
+    int ObLogBuffer::get_log(const int64_t pos, int64_t& start_id, int64_t& end_id, char* buf, const int64_t len, int64_t& read_count) const
+    {
+      int err = OB_SUCCESS;
+      int64_t copy_count = 0;
+      if (OB_SUCCESS != (err = check_state()))
+      {
+        TBSYS_LOG(ERROR, "check_state()=>%d", err);
+      }
+      else if (NULL == buf || len <= 0 || 0 > pos)
       {
         err = OB_INVALID_ARGUMENT;
-        TBSYS_LOG(ERROR, "read(buf=%p[%ld], pos=%ld): invalid argument", buf, len, pos);
+        TBSYS_LOG(ERROR, "get_log(start_id=%ld, buf=%p[%ld]): invalid argument", start_id, buf, len);
       }
-      else if (!is_pos_valid(pos))
+      else if (OB_SUCCESS != (err = read(pos, buf, len, copy_count)))
       {
-        err = OB_DATA_NOT_SERVE;
+        if (OB_DATA_NOT_SERVE != err || OB_FOR_PADDING != err)
+        {
+          TBSYS_LOG(ERROR, "copy_to_buf(%p[%ld], read_count=%ld)=>%d", buf, len, read_count, err);
+        }
       }
-      else if (0 > (read_count = min(len, end_pos_-pos)))
+      else if (OB_SUCCESS != (err = trim_log_buffer(buf, copy_count, read_count, start_id, end_id)))
       {
-        err = OB_ERR_UNEXPECTED; // 通过了 is_pos_valid()检查 不会进入这个分支
+        TBSYS_LOG(ERROR, "parse_log_buffer(buf=%p[%ld], start_id=%ld)=>%d",
+                  buf, copy_count, start_id, err);
       }
-      else if (OB_SUCCESS != (err = copy_from_ring_buf(buf, buf_, buf_len_, pos, read_count)))
+      return err;
+    }
+
+    int get_from_log_buffer(ObLogBuffer* log_buf, const int64_t advised_pos, int64_t& real_pos,
+                                const int64_t start_id, int64_t& end_id, char* buf, const int64_t len, int64_t& read_count)
+    {
+      int err = OB_SUCCESS;
+      int64_t real_start_id = start_id;
+      if (NULL == log_buf || NULL == buf || start_id <= 0 || len <= 0)
       {
-        TBSYS_LOG(ERROR, "copy_from_ring_buf(buf=%p[%ld], ring_buf=%p[%ld], pos=[%ld+%ld])=>%d",
-                  buf, len, buf_, buf_len_, pos, read_count, err);
+        err = OB_INVALID_ARGUMENT;
       }
-      else if (!is_pos_valid(pos))
+      else if (OB_SUCCESS != (err = log_buf->seek(start_id, advised_pos, real_pos)))
       {
-        err = OB_DATA_NOT_SERVE;
+        if (OB_DATA_NOT_SERVE != err)
+        {
+          TBSYS_LOG(ERROR, "log_buf->seek(start_id=%ld, advised_pos=%ld)=>%d", start_id, advised_pos, err);
+        }
+        else
+        {
+          TBSYS_LOG(DEBUG, "log_buf->seek(start_id=%ld, advised_pos=%ld): OB_DATA_NOT_SERVE", start_id, advised_pos);
+        }
+      }
+      else if (OB_SUCCESS != (err = log_buf->get_log(real_pos, real_start_id, end_id, buf, len, read_count))
+               && OB_FOR_PADDING != err)
+      {
+        if (OB_DATA_NOT_SERVE != err)
+        {
+          TBSYS_LOG(ERROR, "log_buf->get_log(pos=%ld, buf=%p[%ld])=>%d", real_pos, buf, len, err);
+        }
+        else
+        {
+          TBSYS_LOG(DEBUG, "log_buf->get_log(pos=%ld): OB_DATA_NOT_SERVE", real_pos);
+        }
+      }
+      else if (OB_FOR_PADDING == err
+               && OB_SUCCESS != (err = log_buf->get_log(real_pos += read_count, real_start_id, end_id, buf, len, read_count)))
+      {
+        TBSYS_LOG(ERROR, "log_buf->get_log(pos=%ld, buf=%p[%ld])=>%d", real_pos, buf, len, err);
+      }
+      else if (start_id != real_start_id)
+      {
+        err = OB_ERR_UNEXPECTED;
+        TBSYS_LOG(ERROR, "start_id[%ld] != real_start_id[%ld]", start_id, real_start_id);
+      }
+      return err;
+    }
+
+    int append_to_log_buffer(ObLogBuffer* log_buf,
+                             const int64_t start_id, const int64_t& end_id, const char* buf, const int64_t len)
+    {
+      int err = OB_SUCCESS;
+      int reset_err = OB_SUCCESS;
+      if (NULL == log_buf || NULL == buf || start_id <= 0 || end_id < start_id || len < 0)
+      {
+        err = OB_INVALID_ARGUMENT;
+        TBSYS_LOG(ERROR, "append_to_log_buffer(log_buf=%p, buf=%p[%ld], id=[%ld,%ld]): invalid argument",
+                  log_buf, buf, len, start_id, end_id);
+      }
+      else if (OB_SUCCESS != (err = log_buf->append_log(log_buf->get_end_pos(), start_id, end_id, buf, len))
+               && OB_NEED_RETRY != err && OB_DISCONTINUOUS_LOG != err)
+      {
+        TBSYS_LOG(ERROR, "log_buf->append_log(pos=%ld, range=[%ld, %ld], buf=%p[%ld])=>%d",
+                  log_buf->get_end_pos(), start_id, end_id, buf, len, err);
+      }
+      else if (OB_SUCCESS == err)
+      {}
+      else if (OB_DISCONTINUOUS_LOG == err && OB_SUCCESS != (reset_err = log_buf->reset()))
+      {
+        err = reset_err;
+        TBSYS_LOG(ERROR, "reset()=>%d", err);
+      }
+      else if (OB_SUCCESS != (err = log_buf->append_log(log_buf->get_end_pos(), start_id, end_id, buf, len)))
+      {
+        TBSYS_LOG(ERROR, "log_buf->append_log(pos=%ld, range=[%ld, %ld], buf=%p[%ld])=>%d",
+                  log_buf->get_end_pos(), start_id, end_id, buf, len, err);
       }
       return err;
     }
   }; // end namespace updateserver
 }; // end namespace oceanbase
+
