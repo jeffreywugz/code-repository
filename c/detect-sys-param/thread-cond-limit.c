@@ -12,7 +12,7 @@ int64_t get_thread_cond_limit(int64_t n)
   assert(cond);
   for(i = 0; 0 == err && i < n; i++) {
     err = pthread_cond_init(cond + i, NULL);
-    if (i % 100 == 0)
+    if (i % ((n/1000)+1) == 0)
       fprintf(stderr, "pthread_cond_init(seq=%ld)=>%d\n", i, err);
   }
   return i;

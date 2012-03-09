@@ -6,6 +6,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <sys/time.h>
+
+int64_t get_usec()
+{
+  struct timeval time_val;
+  gettimeofday(&time_val, NULL);
+  return time_val.tv_sec*1000000 + time_val.tv_usec;
+}
 
 bool stop = false;
 void* thread_run(void* arg)
@@ -22,7 +30,8 @@ int64_t get_thread_limit(int64_t n)
   assert(thread);
   for(i = 0; 0 == err && i < n; i++) {
     err = pthread_create(thread + i, NULL, thread_run, NULL);
-    fprintf(stderr, "thread[%ld] create: err=%d\n", i, err);
+    if(i %(n/200 + 1) == 0)
+      fprintf(stderr, "thread[%ld] create: time=%ld, err=%d\n", i, get_usec(), err);
   }
   stop = true;
   for(int64_t j = 0; j < i; j++) {
