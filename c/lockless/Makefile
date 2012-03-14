@@ -1,4 +1,4 @@
-target = queue
+target = slice-pool
 cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99
