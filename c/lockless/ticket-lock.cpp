@@ -6,7 +6,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <pthread.h>
-
+#define cpu_relax() asm volatile("pause\n")
 #define array_len(x) (sizeof(x)/sizeof(x[0]))
 int64_t get_usec()
 {
@@ -56,7 +56,7 @@ int64_t do_work_with_lock(int64_t idx)
   for(int64_t i = 0; i < n; i++){
     int64_t ticket = ticket_lock.get_ticket();
     while(!ticket_lock.wait(ticket))
-      ;
+      cpu_relax();
     s++;
     if (s > 1)
       n_err++;

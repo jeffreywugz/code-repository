@@ -13,4 +13,4 @@ all: $(target).run
 	$(cxx) $(cxxflags) -o $@ $<
 notify.args = 24
 seq-lock.args = 24
-ticket-lock.args = 16
+ticket-lock.args = 24
