@@ -1,4 +1,4 @@
-target = ticket-lock
+target = queue
 cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99
@@ -14,3 +14,4 @@ all: $(target).run
 notify.args = 24
 seq-lock.args = 24
 ticket-lock.args = 24
+queue.args = 20
