@@ -69,7 +69,7 @@ class Queue
     volatile int64_t rear_;
 };
 
-#define ref_header int64_t ref_
+#define ref_header volatile int64_t ref_
 struct ref_t
 {
   ref_header;
@@ -110,7 +110,7 @@ class SlicePool
 
     int ref(void* p) const {
       int err = 0;
-      int64_t ref = ((ref_t*)p)->ref_++;
+      int64_t ref = __sync_fetch_and_add(&((ref_t*)p)->ref_, 1);
       if (ref <= 0)
       {
         err = -EINVAL;
@@ -120,7 +120,7 @@ class SlicePool
 
     int deref(void* p) {
       int err = 0;
-      int64_t ref = --((ref_t*)p)->ref_;
+      int64_t ref = __sync_add_and_fetch(&((ref_t*)p)->ref_, -1);
       if (ref < 0)
       {
         err = -EINVAL;

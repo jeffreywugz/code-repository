@@ -1,4 +1,4 @@
-target = slice-pool
+target = read-write-lock
 cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99
@@ -12,7 +12,9 @@ all: $(target).run
 %.exe: %.cpp
 	$(cxx) $(cxxflags) -o $@ $<
 notify.args = 24
+read-write-lock.args = 20
 seq-lock.args = 24
 ticket-lock.args = 24
 queue.args = 20
 slice-pool.args = 20
+rcu-lock.args = 20

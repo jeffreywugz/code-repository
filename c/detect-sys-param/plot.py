@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+<<<<<<< HEAD
 '''
 ./plot.py input.data output.img
 '''
