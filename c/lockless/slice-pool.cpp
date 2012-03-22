@@ -162,7 +162,7 @@ typedef void*(*pthread_handler_t)(void*);
 int64_t test_queue(int64_t n)
 {
   int err = 0;
-  pthread_t thread[1<<4];
+  pthread_t thread[1<<2];
   char* buf = (char*)malloc(n * sizeof(void*) + n * sizeof(Node));
   assert(buf);
   err = slice_pool.init((void**)buf, buf + n*sizeof(void*), n, sizeof(Node));

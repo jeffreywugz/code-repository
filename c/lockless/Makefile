@@ -15,3 +15,4 @@ notify.args = 24
 seq-lock.args = 24
 ticket-lock.args = 24
 queue.args = 20
+slice-pool.args = 20
