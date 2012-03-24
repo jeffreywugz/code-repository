@@ -1,8 +1,8 @@
-target = read-write-lock
+target = list-based-queue
 cc = gcc
 cxx = g++
-cflags = -lpthread -std=c99
-cxxflags = -lpthread
+cflags = -lpthread -std=c99 -g
+cxxflags = -lpthread -g
 
 all: $(target).run
 %.run: %.exe
@@ -17,3 +17,4 @@ seq-lock.args = 24
 ticket-lock.args = 16
 queue.args = 20
 rcu-lock.args = 20
+list-based-queue.args = 20
