@@ -1,10 +1,10 @@
-target = thread-limit
+target = mac
 cc = gcc
 cxx = g++
-cflags = -lpthread -std=c99
+cflags = -lpthread
 cxxflags = -lpthread
 
-all: $(target).png
+all: mac.run
 %.run: %.exe
 	./$< $(args)
 %.exe: %.c
