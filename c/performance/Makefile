@@ -1,5 +1,5 @@
-target = sem-vs-pthread-signal
-args = 20
+target = epoll
+args = server 8008
 cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99
