@@ -40,7 +40,8 @@ class Queue
       int64_t rear = rear_;
       if (NULL == items_ || rear&1 || front_+(capacity_<<1) <= rear+1 || !__sync_bool_compare_and_swap(&rear_, rear, rear+1))
         return -EAGAIN;
-      items_[rear++>>1] = p;
+      items_[(rear>>1)%capacity_] = p;
+      rear_++;
       return 0;
     }
 
@@ -48,7 +49,8 @@ class Queue
       int64_t front = front_;
       if (NULL == items_ || front&1 || front+1 >= rear_ || !__sync_bool_compare_and_swap(&front_, front, front+1))
         return -EAGAIN;
-      p = items_[front_++>>1];
+      p = items_[(front>>1)%capacity_];
+      front_++;
       return 0;
     }
   private:
