@@ -122,6 +122,7 @@ int handle_epool_event(int efd, int sfd, epoll_event_handler_t handler, void* se
   return err;
 }
 
+#define MAXEPOLLSIZE 10000
 #define MAXEVENTS 64
 int run_server(int type, in_addr_t ip, int port, epoll_event_handler_t handler, void* arg, int64_t timeout_us)
 {
@@ -133,7 +134,8 @@ int run_server(int type, in_addr_t ip, int port, epoll_event_handler_t handler, 
   {
     error("calloc()=>NULL");
   }
-  else if ((efd = epoll_create1(0)) <= 0)
+  //else if ((efd = epoll_create1(0)) <= 0)
+  else if ((efd = epoll_create(MAXEPOLLSIZE)) <= 0)
   {
     err = -errno;
     error("epoll_create1()=>%s", strerror(err));
@@ -181,12 +183,13 @@ int handle_tcp_socket_event(void* self, int efd, int sfd, int fd, uint32_t sessi
     close(fd);
     err = -ENETRESET;
   }
-  else if (events & EPOLLIN || events & EPOLLHUP || events & EPOLLRDHUP)
+  //else if (events & EPOLLIN || events & EPOLLHUP || events & EPOLLRDHUP)
+  else if (events & EPOLLIN || events & EPOLLHUP)
   {
     if (sfd == fd)
     {
       //fprintf(stderr, "handle accept\n");
-      if (events & EPOLLHUP || events & EPOLLRDHUP)
+      if (events & EPOLLHUP)
       {
         err = -ENETRESET;
       }
@@ -210,7 +213,7 @@ int handle_tcp_socket_event(void* self, int efd, int sfd, int fd, uint32_t sessi
       while (0 == err)
       {
         count = read(fd, buf, sizeof(buf));
-        if (count == -1)
+        if (count < 0)
         {
           err = -errno;
           if (EAGAIN != errno && EWOULDBLOCK != errno)
@@ -218,23 +221,31 @@ int handle_tcp_socket_event(void* self, int efd, int sfd, int fd, uint32_t sessi
         }
         else if (count == 0)
         {
-          err = -EAGAIN;
+          break;
         }
         else
         {
           printf("%s\n", buf);
         }
       }
-      if (0 >= count && -EAGAIN != err &&  0 != (err = rm_fd_from_epoll(efd, fd)))
+      //printf("read(count=%ld)=>%d\n", count, err);
+      if (count != 0 && -EAGAIN == err)
+      {}
+      else if (0 != (err = rm_fd_from_epoll(efd, fd)))
       {
         error("rm_fd_from_epoll(efd=%d, fd=%d)=>err\n", efd, fd, err);
+      }
+      else if (0 != close(fd))
+      {
+        err = -errno;
+        perror("close");
       }
     }
   }
   return err;
 }
 
-int run_client(int type, in_addr_t ip, int port, int64_t id)
+int run_client(int type, in_addr_t ip, int port, int64_t id, int64_t n_packets)
 {
   int err = 0;
   char id_buf[16];
@@ -248,7 +259,7 @@ int run_client(int type, in_addr_t ip, int port, int64_t id)
   {
     err = -EINVAL;
   }
-  else if (0 >= snprintf(id_buf, sizeof(id_buf), "%llx", id))
+  else if (0 >= snprintf(id_buf, sizeof(id_buf), "%ld", id))
   {
     err = -1;
   }
@@ -262,10 +273,14 @@ int run_client(int type, in_addr_t ip, int port, int64_t id)
     perror("connect");
     err = -errno;
   }
-  else if (0 >= (write(fd, id_buf, strlen(id_buf) + 1)))
+  for(int64_t i = 0; 0 == err && i < n_packets; i++)
   {
-    perror("write");
-    err = -errno;
+    if (0 >= (write(fd, id_buf, strlen(id_buf) + 1)))
+    {
+      perror("write");
+      err = -errno;
+    }
+    printf("client(i=%ld, id=%ld, packets=%ld)=>%d\n", i, id, n_packets, err);
   }
   if (fd > 0 && 0 != (close(fd)))
   {
@@ -275,22 +290,22 @@ int run_client(int type, in_addr_t ip, int port, int64_t id)
   return err;
 }
 
-int test_server(int port)
+int test_server(in_addr_t ip, int port)
 {
   int64_t timeout_us = 10*1000;
   printf("server(port=%d)\n", port);
-  return run_server(SOCK_STREAM, inet_addr("127.0.0.1"), port, handle_tcp_socket_event, NULL, timeout_us);
+  return run_server(SOCK_STREAM, ip, port, handle_tcp_socket_event, NULL, timeout_us);
 }
 
-int test_client(in_addr_t ip, int port, int64_t n_iters)
+int test_client(in_addr_t ip, int port, int64_t n_conn, int64_t n_packets)
 {
   int err = 0;
   struct in_addr addr;
   addr.s_addr = ip;
-  printf("client(addr=%s:%d, n_iters=%ld)\n", inet_ntoa(addr), port, n_iters);
-  for(int64_t i = 0; 0 == err && i < n_iters; i++)
+  printf("client(addr=%s:%d, n_conn=%ld, n_packets=%ld)\n", inet_ntoa(addr), port, n_conn, n_packets);
+  for(int64_t i = 0; 0 == err && i < n_conn; i++)
   {
-    if (0 != (err = run_client(SOCK_STREAM, ip, port, i)))
+    if (0 != (err = run_client(SOCK_STREAM, ip, port, i, n_packets)))
     {
       error("run_client(addr=%s:%d, id=%ld)=>%d", inet_ntoa(addr), port, i, err);
     }
@@ -312,24 +327,24 @@ int main(int argc, char **argv)
   }
   else if (0 == strcmp(argv[1], "server"))
   {
-    if (argc != 3)
+    if (argc != 4)
     {
       err = -EINVAL;
       show_help = true;
     }
-    else if (0 != (err = test_server(atoi(argv[2]))))
+    else if (0 != (err = test_server(inet_addr(argv[2]), atoi(argv[3]))))
     {
-      error("test_server(port=%s)=>%d", argv[2], err);
+      error("test_server(ip=%s, port=%s)=>%d", argv[2], argv[3], err);
     }
   }
   else if (0 == strcmp(argv[1], "client"))
   {
-    if (argc != 5)
+    if (argc != 6)
     {
       err = -EINVAL;
       show_help = true;
     }
-    else if (0 != (err = test_client(inet_addr(argv[2]), atoi(argv[3]), atoll(argv[4]))))
+    else if (0 != (err = test_client(inet_addr(argv[2]), atoi(argv[3]), atoll(argv[4]), atoll(argv[5]))))
     {
       error("test_client(%s:%s)=>%d", argv[2], argv[3]);
     }
@@ -341,7 +356,7 @@ int main(int argc, char **argv)
   }
   if (show_help)
   {
-    fprintf(stderr, "Usage:\n\t%1$s server port\n" "\t%1$s client ip port n_iters\n", argv[0]);
+    fprintf(stderr, "Usage:\n\t%1$s server ip port\n" "\t%1$s client ip port n_conn n_packet\n", argv[0]);
   }
 
   port = atoi(argv[1]);
