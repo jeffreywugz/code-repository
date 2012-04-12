@@ -40,5 +40,5 @@ int alloc_str(ObDataBuffer& buf, ObString& str, T value)
   return alloc_str(buf.get_data(), buf.get_capacity(), buf.get_position(), str, value);
 }
 
-#define reg_parse2(pat, str, buf, ...) __reg_parse(pat, str, buf.get_data(), buf.get_capacity(), buf.get_position(), ##__VA_ARGS__, NULL)
+#define reg_parse2(pat, str, buf, ...) (__reg_parse(pat, str, buf.get_data(), buf.get_capacity(), buf.get_position(), ##__VA_ARGS__, NULL) != 0? OB_PARTIAL_FAILED: 0)
 #endif /* __OB_OBCON_UTILS_H__ */

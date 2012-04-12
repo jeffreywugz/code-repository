@@ -589,12 +589,13 @@ struct Config
           break;
       }
     }
-    if (OB_SUCCESS == err && (!interactive || NULL == init_cmd || NULL == init_file))
+    if (OB_SUCCESS == err && !interactive && NULL == init_cmd && NULL == init_file)
     {
       err = OB_INVALID_ARGUMENT;
     }
     if (OB_SUCCESS != err)
     {
+      dump();
       fprintf(stderr, usage, argv[0]);
     }
     return err;
@@ -623,7 +624,7 @@ int do_main(Config& cfg)
   }
   
   if ((cfg.keep_going || OB_SUCCESS == err)
-      && cfg.interactive && OB_SUCCESS != (err = execute_interactive(&rt_con, cfg.keep_going, delim, prompt)))
+      && cfg.interactive && OB_SUCCESS != (err = execute_interactive(&rt_con, true, delim, prompt)))
   {
     TBSYS_LOG(ERROR, "execute_interactive(rt_con)=>%d", err);
   }

@@ -1,4 +1,4 @@
-top-dir = $$HOME/ob.dev/
+top-dir = $$HOME/ob.ndev/
 my-utils-lib = ../utils
 target=obcon
 cxx = g++
@@ -20,7 +20,8 @@ clean:
 	rm -rf *.o *.exe
 srcs= $(wildcard *.cpp)
 objs= $(patsubst %.cpp,%.o,$(srcs))
-$(target).exe: $(objs)
+log_locator.exe: log_locator.o
+obcon.exe: ob_client_helper.o ob_console.o ob_utils.o
 dep:
 	(for f in $(srcs);do echo -n "";$(cxx) -E $(cxx-flags) -M -MM -MG $$f;done) >> .dep
 ### Dependencies:
