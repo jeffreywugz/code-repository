@@ -130,20 +130,21 @@ int execute_str(Interpreter* interpreter, const char* str, bool keep_going, cons
   int err = 0;
   int execute_err = 0;
   char* tmp_str = NULL;
+  char* pstr = NULL;
   char* statmt = NULL;
   if (NULL == interpreter || NULL == str)
   {
     err = EINVAL;
     log(ERROR, "execute_str(interpreter=%p, str='%s')=>%d", interpreter, str, err);
   }
-  else if (NULL == (tmp_str = strdup(str)))
+  else if (NULL == (pstr = tmp_str = strdup(str)))
   {
     err = ENOMEM;
     log(ERROR, "strdup()=>%d", err);
   }
   while(0 == err)
   {
-    if (NULL == (statmt = mystrsep(&tmp_str, delim)))
+    if (NULL == (statmt = mystrsep(&pstr, delim)))
     {
       break;
     }

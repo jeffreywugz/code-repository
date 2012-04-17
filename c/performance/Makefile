@@ -1,8 +1,8 @@
-target = epoll
-args = server 8008
+target = memset
+args = 1024 1024
 cc = gcc
 cxx = g++
-cflags = -lpthread -std=c99
+cflags = -lpthread -std=c99 -O2
 cxxflags = -lpthread
 
 all: $(target).run
