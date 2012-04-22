@@ -15,9 +15,8 @@
 #include <getopt.h>
 #include "ob_client2.h"
 #include "common/ob_schema.h"
-#include "ob_client_helper.h"
-#include "common/ob_tablet_info.h"
 #include "common/utility.h"
+#include "ob_client_helper.h"
 #include "ob_utils.h"
 #include "sh.h"
 
@@ -57,56 +56,6 @@ ObServer& to_server(ObServer& server, const char *addr, int32_t port)
     return server;
 }
 
-int desc_tables(ObDataBuffer& buf, ObSchemaManagerV2* schema_mgr, const char* table_name, const char*& result)
-{
-  int err = OB_SUCCESS;
-  int n_column = 0;
-  ObTableSchema* table_schema = NULL;
-  const ObColumnSchemaV2* columns = NULL;
-  const char* tmp_result = buf.get_data() + buf.get_position();
-  TBSYS_LOG(INFO, "desc_tables(table_name='%s')", table_name);
-  if (NULL == schema_mgr)
-  {
-    err = OB_INVALID_ARGUMENT;
-    TBSYS_LOG(ERROR, "schema_mgr == NULL");
-  }
-  else if (NULL == table_name || 0 == strcmp(table_name, "*"))
-  {
-    for (const ObTableSchema* it=schema_mgr->table_begin();
-         OB_SUCCESS == err && it != schema_mgr->table_end(); ++it)
-    {
-      if (OB_SUCCESS != (err = strformat(buf, "[%ld %s] ", it->get_table_id(), it->get_table_name())))
-      {
-        TBSYS_LOG(ERROR, "strfomat()=>%d", err);
-      }
-    }
-  }
-  else
-  {
-    if (NULL == (table_schema = schema_mgr->get_table_schema(table_name)))
-    {
-      err = OB_SCHEMA_ERROR;
-      TBSYS_LOG(ERROR, "schema_mgr->get_table_schema(table_name=%s)=>NULL", table_name);
-    }
-    else if (NULL == (columns = schema_mgr->get_table_schema(table_schema->get_table_id(), n_column)))
-    {
-      err = OB_SCHEMA_ERROR;
-      TBSYS_LOG(ERROR, "schema_mgr->get_table_schema(table_name=%s)=>NULL", table_name);
-    }
-    for(int i = 0; OB_SUCCESS == err && i < n_column; i++)
-    {
-      if (OB_SUCCESS != (err = strformat(buf, "[%ld %s %s] ", columns[i].get_id(), columns[i].get_name(), obj_type_repr(columns[i].get_type()))))
-      {
-        TBSYS_LOG(ERROR, "strformat()=>%d", err);
-      }
-    }
-  }
-  if (OB_SUCCESS == err)
-  {
-    result = tmp_result;
-  }
-  return err;
-}
 
 int make_whole_range(ObBorderFlag& border_flag)
 {

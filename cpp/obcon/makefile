@@ -1,6 +1,6 @@
-top-dir = $$HOME/ob.ndev/
+top-dir = $$HOME/ob.30/
 my-utils-lib = ../utils
-target=obcon
+target=client
 cxx = g++
 std-header-defs = -DSTDC_HEADERS=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_MEMORY_H=1 -DHAVE_STRINGS_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_UNISTD_H=1 -DHAVE_DLFCN_H=1 -D__STDC_LIMIT_MACROS
 package-defs = -DPACKAGE_NAME=\"OceanBase\" -DPACKAGE_TARNAME=\"oceanbase\" -DPACKAGE_VERSION=\"0.2.5\" -DPACKAGE_STRING=\"OceanBase\ 0.2.5\" -DPACKAGE_BUGREPORT=\"qushan@taobao.com\"  -DPACKAGE=\"oceanbase\" -DVERSION=\"0.2.5\" -DRELEASEID=\"\"
@@ -20,6 +20,7 @@ clean:
 	rm -rf *.o *.exe
 srcs= $(wildcard *.cpp)
 objs= $(patsubst %.cpp,%.o,$(srcs))
+client.exe: ob_client2.o ob_utils.o
 log_locator.exe: log_locator.o
 obcon.exe: ob_client_helper.o ob_console.o ob_utils.o
 dep:

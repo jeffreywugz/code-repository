@@ -4,7 +4,7 @@ class CmdArgsParser
 {
   const static int64_t MAX_N_ARGS = 1<<10;
   struct arg_t {
-    arg_t(): name_(NULL), value_(NULL), default_value_(NULL) {}
+    arg_t(): name_(NULL), value_(null_), default_value_(NULL) {}
     ~arg_t() {}
     const char* name_;
     const char* value_;
@@ -46,10 +46,11 @@ class CmdArgsParser
         if (arg && arg->name_) arg->value_ = p;
       }
       for(int64_t i = 0; i < n_args_; i++) {
-        args_[i].value_ = args_[i].value_?: args_[i].default_value_;
+        if (null_ == args_[i].value_ && args_[i].default_value_)
+          args_[i].value_ = args_[i].default_value_;
         if (null_ == args_[i].value_)args_is_valid = false;
       }
-      dump(argc, argv);
+      //dump(argc, argv);
       return args_is_valid;
     }
 
@@ -93,12 +94,22 @@ class CmdArgsParser
     arg_t default_arg_;
     arg_t args_[MAX_N_ARGS];    
 };
+bool argv1_match_func(const char* argv1, const char* func)
+{
+  const char* last_part = strrchr(func, '.');
+  if (NULL != last_part)
+  {
+    last_part++;
+  }
+  return 0 == strcmp(last_part, argv1);
+}
+
 const char* CmdArgsParser::null_ = "*null*";
 CmdArgsParser __cmd_args_parser;
 #define _Arg(name, ...) __cmd_args_parser.get_arg(#name,  ##__VA_ARGS__)
 #define IntArg(name, ...) atoll(__cmd_args_parser.get_arg(#name,  ##__VA_ARGS__)->value_)
 #define StrArg(name, ...) __cmd_args_parser.get_arg(#name,  ##__VA_ARGS__)->value_
 #define CmdCall(argc, argv, func, ...) \
-  (argc >= 2 && !strcmp(#func, argv[1]) && __cmd_args_parser.reset() && __cmd_args_parser.check(argc-2, argv+2, ##__VA_ARGS__))? \
+  (argc >= 2 && argv1_match_func(argv[1], #func) && __cmd_args_parser.reset() && __cmd_args_parser.check(argc-2, argv+2, ##__VA_ARGS__))? \
   func(__VA_ARGS__)
 #endif /* __OB_TOOLS_CMD_ARGS_PARSER_H__ */

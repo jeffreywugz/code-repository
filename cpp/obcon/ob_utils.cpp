@@ -1,4 +1,5 @@
-#include "common.h"
+#include <stdarg.h>
+#include "common/utility.h"
 #include "ob_utils.h"
 
 const char* obj_type_repr(const ObObjType _type)
@@ -113,7 +114,50 @@ int strformat(char* buf, const int64_t len, int64_t& pos, const char* format, ..
   return err;
 }
 
-const char* DEFAULT_TIME_FORMAT = "%Y-%m-%d %H:%M:%S";
+int bin2hex(char* buf, const int64_t len, int64_t& pos, ObString& str, const char* data, const int64_t size)
+{
+  int err = OB_SUCCESS;
+  int32_t count = 0;
+  char* char_ptr = buf + pos;
+  if (0 >= (count = hex_to_str(data, size, buf + pos, len - pos - 1)))
+  {}
+  else
+  {
+    count *= 2;
+    pos += count;
+    buf[pos] = 0;
+    str.assign_ptr(char_ptr, count);
+  }
+  return err;
+}
+
+int hex2bin(char* buf, const int64_t len, int64_t& pos, ObString& str, const char* data, const int64_t size)
+{
+  int err = OB_SUCCESS;
+  int32_t count = 0;
+  char* char_ptr = buf + pos;
+  if (0 >= (count = str_to_hex(data, size, buf + pos, len - pos -1)))
+  {}
+  else
+  {
+    count /= 2;
+    pos += count;
+    buf[pos] = 0;
+    str.assign_ptr(char_ptr, count);
+  }
+  return err;
+}
+
+int bin2hex(ObDataBuffer& buf, ObString& str, const char* data, const int64_t size)
+{
+  return bin2hex(buf.get_data(), buf.get_capacity(), buf.get_position(), str, data, size);
+}
+
+int hex2bin(ObDataBuffer& buf, ObString& str, const char* data, const int64_t size)
+{
+  return hex2bin(buf.get_data(), buf.get_capacity(), buf.get_position(), str, data, size);
+}
+
 int time_format(char* buf, const int64_t len, int64_t& pos, const int64_t time_us, const char *format)
 {
   int err = OB_SUCCESS;
@@ -138,6 +182,8 @@ int time_format(char* buf, const int64_t len, int64_t& pos, const int64_t time_u
   return err;
 }
 
+#if 0
+const char* DEFAULT_TIME_FORMAT2 = "%Y-%m-%d %H:%M:%S";
 const char* time2str(const int64_t time_us, const char* format=DEFAULT_TIME_FORMAT);
 const char* time2str(const int64_t time_us, const char* format)
 {
@@ -150,6 +196,7 @@ const char* time2str(const int64_t time_us, const char* format)
   }
   return OB_SUCCESS == err? buf: NULL;
 }
+#endif
 
 int repr(char* buf, const int64_t len, int64_t& pos, const ObObj& value)
 {
@@ -287,7 +334,13 @@ int repr(char* buf, const int64_t len, int64_t& pos, const char* _str)
   }
   return err;
 }
-  
+
+int copy_str(char* buf, const int64_t len, int64_t& pos, char*& str, const char* _str)
+{
+  str = buf + pos;
+  return repr(buf, len, pos, _str);
+}
+
 int repr(char* buf, const int64_t len, int64_t& pos, const ObString& _str)
 {
   int err = OB_SUCCESS;
@@ -297,57 +350,58 @@ int repr(char* buf, const int64_t len, int64_t& pos, const ObString& _str)
   }
   return err;
 }
-    
-int repr(char* buf, const int64_t len, int64_t& pos, const ObScanner& scanner, int64_t row_limit /*=-1*/)
+
+int repr(char* buf, const int64_t len, int64_t& pos, ObScanner& scanner, int64_t row_limit /*=-1*/)
 {
   int err = OB_SUCCESS;
-  err = strformat(buf, len, pos, "scanner[%p]", &scanner);
-  // for(ObScanner::RowIterator it = scanner.row_begin(); OB_SUCCESS == err && it != scanner.row_end(); ++it)
-  // {
-  //   ObCellInfo* cells = NULL;
-  //   int64_t n = 0;
-  //   if (0 < row_limit && row_idx > row_limit)
-  //   {
-  //     break;
-  //   }
-  //   if (OB_SUCCESS != (err = it.get_row(&cells, &n)))
-  //   {
-  //     TBSYS_LOG(ERROR, "row_iter->get_row()=>%d", err);
-  //   }
-  //   for(int i = 0; OB_SUCCESS == err && (row_idx % 10) == 0 && i < n; i++)
-  //   {
-  //     if (OB_SUCCESS != (err = repr(buf, len, pos, cells[i].column_name_)))
-  //     {
-  //       TBSYS_LOG(ERROR, "repr()=>%d", err);
-  //     }
-  //     else if (OB_SUCCESS != (err = repr(buf, len, pos, "\t")))
-  //     {
-  //       TBSYS_LOG(ERROR, "repr('\t')=>%d", err);
-  //     }
-  //   }
-  //   if (OB_SUCCESS == err && (row_idx % 10) == 0 && OB_SUCCESS != (err =  repr(buf, len, pos, "\n")))
-  //   {
-  //     TBSYS_LOG(ERROR, "repr('\n')=>%d", err);
-  //   }
-        
-  //   for(int i = 0; OB_SUCCESS == err && i < n; i++)
-  //   {
-  //     if (OB_SUCCESS != (err = repr(buf, len, pos, cells[i].value_)))
-  //     {
-  //       TBSYS_LOG(ERROR, "repr()=>%d", err);
-  //     }
-  //     else if (OB_SUCCESS != (err = repr(buf, len, pos, "\t")))
-  //     {
-  //       TBSYS_LOG(ERROR, "repr('\t')=>%d", err);
-  //     }
-  //   }
-        
-  //   if (OB_SUCCESS == err && OB_SUCCESS != (err =  repr(buf, len, pos, "\n")))
-  //   {
-  //     TBSYS_LOG(ERROR, "repr('\n')=>%d", err);
-  //   }
-  //   row_idx++;
-  // }
+  int64_t row_count = 0;
+  ObCellInfo* cell_info;
+  ObString rowkey;
+  bool is_row_changed = false;
+
+  //err = strformat(buf, len, pos, "scanner[%p]", &scanner);
+  while(OB_SUCCESS == err)
+  {
+    if (OB_SUCCESS != (err = scanner.next_cell()) && OB_ITER_END != err)
+    {
+      TBSYS_LOG(ERROR, "scanner.next_cell()=>%d", err);
+    }
+    else if (OB_ITER_END == err)
+    {}
+    else if (OB_SUCCESS != (err = scanner.get_cell(&cell_info, &is_row_changed)))
+    {
+      TBSYS_LOG(ERROR, "scanner.get_cell()=>%d", err);
+    }
+    else if (is_row_changed && ++row_count
+             && !(OB_SUCCESS == (err = strformat(buf, len, pos, "\n"))
+                  && OB_SUCCESS == (err = bin2hex(buf, len, pos, rowkey, cell_info->row_key_.ptr(), cell_info->row_key_.length()))
+                  && OB_SUCCESS == (err = strformat(buf, len, pos, " "))))
+    {}
+    else if (OB_SUCCESS != (err = repr(buf, len, pos, cell_info->column_name_)))
+    {
+      TBSYS_LOG(ERROR, "repr()=>%d", err);
+    }
+    else if (OB_SUCCESS != (err = repr(buf, len, pos, "=")))
+    {
+      TBSYS_LOG(ERROR, "repr('\t')=>%d", err);
+    }
+    else if (OB_SUCCESS != (err = repr(buf, len, pos, cell_info->value_)))
+    {
+      TBSYS_LOG(ERROR, "repr()=>%d", err);
+    }
+    else if (OB_SUCCESS != (err = repr(buf, len, pos, "\t")))
+    {
+      TBSYS_LOG(ERROR, "repr('\t')=>%d", err);
+    }
+  }
+  if (row_count <= 0)
+  {
+    repr(buf, len, pos, "\nnothing read!\n");
+  }
+  if (OB_ITER_END == err)
+  {
+    err = OB_SUCCESS;
+  }
   return err;
 }
 
@@ -425,6 +479,48 @@ int split(char* buf, const int64_t len, int64_t& pos, const char* str, const cha
     n_secs = i;
   }
   return err;
+}
+
+int parse_range(char* buf, const int64_t len, int64_t& pos, const char* _range, char*& start, char*& end)
+{
+  int err = OB_SUCCESS;
+  char* saveptr = NULL;
+  char* range = NULL;
+  const char* delim = ", ";
+  if (NULL == buf || NULL == _range)
+  {
+    err = OB_INVALID_ARGUMENT;
+    TBSYS_LOG(ERROR, "parse_range(buf=%p[%ld], range=%s): INVALID_ARGUMENT", buf, len, _range);
+  }
+  else if (OB_SUCCESS != (err = copy_str(buf, len, pos, range, _range)))
+  {
+    TBSYS_LOG(ERROR, "alloc_str(buf=%p, len=%ld, pos=%ld, str='%s')=>%d", buf, len, pos, _range, err);
+  }
+  else if ('[' != range[0] || ']' != range[strlen(range)-1])
+  {
+    err = OB_INVALID_ARGUMENT;
+    TBSYS_LOG(ERROR, "ill formated range: %s", range);
+  }
+  else if (NULL == (start = strtok_r(range + 1, delim, &saveptr)))
+  {
+    err = OB_INVALID_ARGUMENT;
+    TBSYS_LOG(ERROR, "strtok_r(str='%s')=>NULL", range);
+  }
+  else if (NULL == (end = strtok_r(NULL, delim, &saveptr)))
+  {
+    err = OB_INVALID_ARGUMENT;
+    TBSYS_LOG(ERROR, "strtok_r(str='%s')=>NULL", range);
+  }
+  else
+  {
+    end[strlen(end)-1] = 0;
+  }
+  return err;
+}
+
+int parse_range(ObDataBuffer& buf, const char* _range, char*& start, char*& end)
+{
+  return parse_range(buf.get_data(), buf.get_capacity(), buf.get_position(), _range, start, end);
 }
 
 int strformat(ObDataBuffer& buf, const char* format, ...)

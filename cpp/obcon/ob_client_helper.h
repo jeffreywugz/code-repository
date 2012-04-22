@@ -59,7 +59,6 @@ namespace oceanbase
         ThreadSpecificBuffer* thread_buffer_;
         int64_t timeout_;
         ObServer root_server_;
-        ObServer merge_server_[OB_SAFE_COPY_COUNT];
     };
     
   } /* common */

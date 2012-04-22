@@ -24,6 +24,88 @@ namespace oceanbase
 {
   namespace common
   {
+    int ObClientHelper2::parse_merge_server(ObServer* merge_servers, ObScanner& scanner)
+    {
+      ObServer server;
+      ObString start_key;
+      ObString end_key; 
+      ObCellInfo * cell = NULL;
+      ObScannerIterator iter; 
+      bool row_change = false;
+      int index = 0;
+      int ret = OB_SUCCESS;
+
+      int64_t ip = 0;
+      int64_t port = 0;
+      int64_t version = 0;
+      iter = scanner.begin();
+      ret = iter.get_cell(&cell, &row_change);
+      row_change = false;
+
+      while((OB_SUCCESS == ret))
+      {
+        if (ret != OB_SUCCESS)
+        {
+          TBSYS_LOG(ERROR, "get cell from scanner iterator failed:ret[%d]", ret);
+        }
+        else if (row_change && index > 0)
+        {
+          TBSYS_LOG(DEBUG,"row changed,ignore"); 
+          hex_dump(cell->row_key_.ptr(),cell->row_key_.length(),false,TBSYS_LOG_LEVEL_DEBUG);
+          break; //just get one row        
+        } 
+        else if (cell != NULL)
+        {
+          end_key.assign(cell->row_key_.ptr(), cell->row_key_.length());
+          if ((cell->column_name_.compare("1_ms_port") == 0) 
+              || (cell->column_name_.compare("2_ms_port") == 0) 
+              || (cell->column_name_.compare("3_ms_port") == 0))
+          {
+            ret = cell->value_.get_int(port);
+            TBSYS_LOG(DEBUG,"port is %ld",port);
+          }
+          else if ((cell->column_name_.compare("1_ipv4") == 0)
+              || (cell->column_name_.compare("2_ipv4") == 0)
+              || (cell->column_name_.compare("3_ipv4") == 0))
+          {
+            ret = cell->value_.get_int(ip);
+            TBSYS_LOG(DEBUG,"ip is %ld",ip);
+          }
+          else if (cell->column_name_.compare("1_tablet_version") == 0 ||
+              cell->column_name_.compare("2_tablet_version") == 0 ||
+              cell->column_name_.compare("3_tablet_version") == 0)
+          {
+            ret = cell->value_.get_int(version);
+            hex_dump(cell->row_key_.ptr(),cell->row_key_.length(),false,TBSYS_LOG_LEVEL_DEBUG);
+            TBSYS_LOG(DEBUG,"tablet_version is %d",version);
+          }
+
+          if (OB_SUCCESS == ret)
+          {
+            if (0 != port && 0 != ip && 0 != version)
+            {
+              TBSYS_LOG(DEBUG,"ip,port,version:%ld,%ld,%d",ip,port,version);
+              merge_server[index++].set_ipv4_addr(ip, port);
+              ip = port = version = 0;
+            }
+          }
+          else 
+          {
+            TBSYS_LOG(ERROR, "check get value failed:ret[%d]", ret);
+          }
+
+          if (++iter == scanner.end())
+            break;
+          ret = iter.get_cell(&cell, &row_change);
+        }
+        else
+        {
+          //impossible
+        }
+      }
+      return ret;
+    }
+
     ObClientHelper2::ObClientHelper2() :inited_(false),client_manager_(NULL),thread_buffer_(NULL),timeout_(100*1000L)
     {}
 
@@ -275,13 +357,11 @@ namespace oceanbase
     int ObClientHelper2::get_tablet_info(const ObScanParam& scan_param)
     {
       ObScanner scanner;
-      int ret = OB_SUCCESS;
+      int err = OB_SUCCESS;
 
-      if ((ret = scan(root_server_,scan_param,scanner)) != OB_SUCCESS) 
+      if (OB_SUCCESS != (err = scan(root_server_,scan_param,scanner)))
       {
-        char tmp_buf[32];
-        root_server_.to_string(tmp_buf,sizeof(tmp_buf));
-        TBSYS_LOG(ERROR,"get tablet from rootserver(%s) failed:[%d]",tmp_buf,ret);
+        TBSYS_LOG(ERROR,"get tablet from rootserver(%s) failed:[%d]", , err);
       }
 
       if (OB_SUCCESS == ret)
@@ -311,87 +391,6 @@ namespace oceanbase
       return ret;
     }
 
-    int ObClientHelper2::parse_merge_server(ObScanner& scanner)
-    {
-      ObServer server;
-      ObString start_key;
-      ObString end_key; 
-      ObCellInfo * cell = NULL;
-      ObScannerIterator iter; 
-      bool row_change = false;
-      int index = 0;
-      int ret = OB_SUCCESS;
-
-      int64_t ip = 0;
-      int64_t port = 0;
-      int64_t version = 0;
-      iter = scanner.begin();
-      ret = iter.get_cell(&cell, &row_change);
-      row_change = false;
-
-      while((OB_SUCCESS == ret))
-      {
-        if (ret != OB_SUCCESS)
-        {
-          TBSYS_LOG(ERROR, "get cell from scanner iterator failed:ret[%d]", ret);
-        }
-        else if (row_change && index > 0)
-        {
-          TBSYS_LOG(DEBUG,"row changed,ignore"); 
-          hex_dump(cell->row_key_.ptr(),cell->row_key_.length(),false,TBSYS_LOG_LEVEL_DEBUG);
-          break; //just get one row        
-        } 
-        else if (cell != NULL)
-        {
-          end_key.assign(cell->row_key_.ptr(), cell->row_key_.length());
-          if ((cell->column_name_.compare("1_ms_port") == 0) 
-              || (cell->column_name_.compare("2_ms_port") == 0) 
-              || (cell->column_name_.compare("3_ms_port") == 0))
-          {
-            ret = cell->value_.get_int(port);
-            TBSYS_LOG(DEBUG,"port is %ld",port);
-          }
-          else if ((cell->column_name_.compare("1_ipv4") == 0)
-              || (cell->column_name_.compare("2_ipv4") == 0)
-              || (cell->column_name_.compare("3_ipv4") == 0))
-          {
-            ret = cell->value_.get_int(ip);
-            TBSYS_LOG(DEBUG,"ip is %ld",ip);
-          }
-          else if (cell->column_name_.compare("1_tablet_version") == 0 ||
-              cell->column_name_.compare("2_tablet_version") == 0 ||
-              cell->column_name_.compare("3_tablet_version") == 0)
-          {
-            ret = cell->value_.get_int(version);
-            hex_dump(cell->row_key_.ptr(),cell->row_key_.length(),false,TBSYS_LOG_LEVEL_DEBUG);
-            TBSYS_LOG(DEBUG,"tablet_version is %d",version);
-          }
-
-          if (OB_SUCCESS == ret)
-          {
-            if (0 != port && 0 != ip && 0 != version)
-            {
-              TBSYS_LOG(DEBUG,"ip,port,version:%ld,%ld,%d",ip,port,version);
-              merge_server_[index++].set_ipv4_addr(ip, port);
-              ip = port = version = 0;
-            }
-          }
-          else 
-          {
-            TBSYS_LOG(ERROR, "check get value failed:ret[%d]", ret);
-          }
-
-          if (++iter == scanner.end())
-            break;
-          ret = iter.get_cell(&cell, &row_change);
-        }
-        else
-        {
-          //impossible
-        }
-      }
-      return ret;
-    }
 
     int ObClientHelper2::get_thread_buffer_(ObDataBuffer& data_buff)
     {
