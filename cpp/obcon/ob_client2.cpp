@@ -40,7 +40,9 @@ const char* _usages = "Usages:\n"
   "\t%1$s get_max_log_seq_replayable ups_ip:ups_port\n"
   "\t%1$s get_last_frozen_version ups_ip:ups_port\n"
   "\t%1$s scan rs_ip:rs_port table columns rowkey limit server\n"
-  "\t%1$s set rs_ip:rs_port table column rowkey value\n";
+  "\t# default scan args: columns='*', rowkey=[min,max], limit=10, server=anyserver\n"
+  "\t%1$s set rs_ip:rs_port table column rowkey value server\n"
+  "\t# default set args: server=anyserver\n";
 
 struct ServerList
 {
@@ -65,7 +67,7 @@ struct ServerList
     {
       if (OB_SUCCESS != (err = servers_[i].deserialize(buf, len, pos)))
       {
-        TBSYS_LOG(ERROR, "deserialize %dth SERVER error, ret=%d", i, err);
+        TBSYS_LOG(ERROR, "deserialize %ldth SERVER error, ret=%d", i, err);
       }
       else if (OB_SUCCESS != (err = serialization::decode_vi64(buf, len, pos, &reserved)))
       {
@@ -233,7 +235,7 @@ int scan_func(ObDataBuffer& buf, ObScanParam& scan_param, int64_t start_version,
   }
   else if (OB_SUCCESS != (err = scan_param.set_limit_info(0, limit)))
   {
-    TBSYS_LOG(ERROR, "scan_param.set_limit_info(offset=%ld, limit=%ld)=>%d", 0, limit, err);
+    TBSYS_LOG(ERROR, "scan_param.set_limit_info(offset=%d, limit=%ld)=>%d", 0, limit, err);
   }
   return err;
 }
@@ -508,7 +510,7 @@ struct RPC : public BaseClient
     {
       if (OB_SUCCESS != (err = to_server(ms, _ms)))
       {
-        TBSYS_LOG(ERROR, "to_server(%s)=>%d", _ms);
+        TBSYS_LOG(ERROR, "to_server(%s)=>%d", _ms, err);
       }
     }
     else if (OB_SUCCESS != (err = send_request(rs, OB_GET_MS_LIST, _dummy_, ms_list)))
@@ -615,7 +617,7 @@ int main(int argc, char *argv[])
 {
   int err = 0;
   RPC rpc;
-  TBSYS_LOGGER.setLogLevel(getenv("log_level")?:"INFO");
+  TBSYS_LOGGER.setLogLevel(getenv("log_level")?:"WARN");
   if (getenv("log_file"))
     TBSYS_LOGGER.setFileName(getenv("log_file"));
   if (OB_SUCCESS != (err = ob_init_memory_pool()))

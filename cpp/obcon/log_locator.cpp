@@ -50,7 +50,7 @@ int locate(const char* log_dir, int64_t log_id)
   if (NULL == log_dir || 0 >= log_id)
   {
     err = OB_INVALID_ARGUMENT;
-    TBSYS_LOG(ERROR, "find_log(log_dir=%s, log_id=%d): INVALID ARGUMENT.", log_dir, log_id);
+    TBSYS_LOG(ERROR, "find_log(log_dir=%s, log_id=%ld): INVALID ARGUMENT.", log_dir, log_id);
   }
   else if (OB_SUCCESS != (err = log_locator.init(log_dir)))
   {
@@ -189,7 +189,7 @@ int dump(const char* log_file)
     else
     {
       int64_t pos = 0;
-      fprintf(stdout, "SEQ: %lu\t %s[%d] DataLength: %ld\n", log_seq, get_log_cmd_repr(cmd), cmd, data_len);
+      fprintf(stdout, "%lu|%ld\t|%ld\t%s[%d]\n", log_seq, reader.get_cur_offset(), data_len, get_log_cmd_repr(cmd), cmd);
       if (OB_LOG_UPS_MUTATOR != cmd)
       {}
       else if (OB_SUCCESS != (err = mutator.deserialize(log_data, data_len, pos)))

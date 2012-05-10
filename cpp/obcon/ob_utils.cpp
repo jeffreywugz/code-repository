@@ -452,8 +452,8 @@ int split(char* buf, const int64_t len, int64_t& pos, const char* str, const cha
   if (NULL == buf || NULL == str || NULL == delim || 0 >= max_n_secs || NULL == secs)
   {
     err = OB_INVALID_ARGUMENT;
-    TBSYS_LOG(ERROR, "split(buf='%s', str='%s', delim='%s', max_n_secs='%s', secs=%p)=>%d",
-              buf, str, delim, max_n_secs, n_secs, err);
+    TBSYS_LOG(ERROR, "split(buf='%s', str='%s', delim='%s', max_n_secs='%d', secs=%p)=>%d",
+              buf, str, delim, max_n_secs, secs, err);
   }
   else if (OB_SUCCESS != (err = alloc_str(buf, len, pos, _str, str)))
   {
@@ -554,7 +554,7 @@ int parse_servers(const char* tablet_servers, const int max_n_servers, int& n_se
   else if ((int)ARRAYSIZEOF(server_specs) > max_n_servers)
   {
     err = OB_BUF_NOT_ENOUGH;
-    TBSYS_LOG(ERROR, "ARRAYSIZEOF(server_specs)[%ld] > max_n_servers[%ld]", ARRAYSIZEOF(server_specs), max_n_servers);
+    TBSYS_LOG(ERROR, "ARRAYSIZEOF(server_specs)[%ld] > max_n_servers[%d]", (int64_t)ARRAYSIZEOF(server_specs), max_n_servers);
   }
   else if (OB_SUCCESS != (err = split(buf, tablet_servers, ", ", max_n_servers, server_count, server_specs)))
   {

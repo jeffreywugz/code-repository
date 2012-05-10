@@ -38,6 +38,7 @@ class CmdArgsParser
         *p++ = 0;
         arg_t* arg = get_arg(argv[i]);
         if (arg && &default_arg_ != arg) arg->value_ = p;
+        *--p = '=';
       }
       for(int64_t i = 0; i < argc; i++) {
         if (argv[i][0] != ':' && (p = strchr(argv[i], '=')))continue;
@@ -100,6 +101,10 @@ bool argv1_match_func(const char* argv1, const char* func)
   if (NULL != last_part)
   {
     last_part++;
+  }
+  else
+  {
+    last_part = func;
   }
   return 0 == strcmp(last_part, argv1);
 }
