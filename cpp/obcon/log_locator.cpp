@@ -186,6 +186,8 @@ int dump(const char* log_file)
     {
       TBSYS_LOG(ERROR, "read_log()=>%d", err);
     }
+    else if (OB_READ_NOTHING == err)
+    {}
     else
     {
       int64_t pos = 0;
@@ -213,7 +215,7 @@ int dump(const char* log_file)
 int main(int argc, char *argv[])
 {
   int err = 0;
-  TBSYS_LOGGER.setLogLevel(getenv("log_level")?:"INFO");
+  TBSYS_LOGGER.setLogLevel(getenv("log_level")?:"WARN");
   init_log_cmd_str();
   if (OB_SUCCESS != (err = ob_init_memory_pool()))
   {

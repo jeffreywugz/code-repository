@@ -1,0 +1,45 @@
+#+Title: Cache and Prefetch
+
+* Prefetch
+CPU能检测出顺序的访存，即如果连续的访存地址形成等差数列，比如每隔8字节访存一次，CPU就能预测接下来要访问的地址,
+CPU就会主动去预取数据。
+
+如果prefetch生效了，访存的性能就和工作集的大小没有关系。但是检测prefetch的模式是有限制的，
+如果两次地址间隔太大，即使这些访存的地址是线性的，CPU也不会去prefetch.
+下面的图展示了prefetch的特性:
+[[./prefetch.png]]
+
+图中block的大小即为working set的大小，纵坐标表示访存的平均延迟，访存的地址线性递增，横坐标表示两次访存的stride，
+若地址增加到了block末尾，折回block开始，但是要加上一个偏移，目的是避免访问同一个地址。
+代码如下:
+#+begin_src c
+ for(int64_t j = 0; j < (n_access*stride/size); j++) {
+    for(int64_t i = 0; i < size; i += stride) {
+      s |= buf[i + j % stride];
+    }
+  }
+#+end_src
+
+1. 显然即使block大小为10M，只要访存是线性的，并且两次访存的地址间隔不大，访存的延迟也不会增加。
+2. 当block大小小于L1 cache(32K)时，访存延迟都很接近。
+
+* Cache
+下面的图更明显的表示出来CPU cache Prefetch和Cache分层的效果:
+图的横坐标表示MemBlock的大小(即C代码中的size)，纵坐标表示访存延迟，几条曲线表示采用不同的stride，使用的C代码片段如下:
+#+begin_src c
+ for(int64_t j = 0; j < (n_access*stride/size); j++) {
+    for(int64_t i = 0; i < size; i += stride) {
+      s |= buf[i + j % stride];
+    }
+  }
+#+end_src
+[[./workingset.png]]
+
+1. 当size特别小时，统计出的时间反而更高，这只是因为此时C代码中内层循环的开销较大，与实际访存没有关系，分析时可以去掉这部分异常情况.
+2. 当size变大时，统计出的访存时间也变高，这是因为WorkingSet到了某个大小，Cache便开始频繁失效。
+3. stride较小时，即使WorkingSet超过了Cache大小，访存延迟也没有显著升高，这就是Prefetch的作用。
+从图中看的出来，8M是一个明显的转折点，这正是L2 Cache的大小:
+#+begin_example
+yuanqi.xhf@OceanBase036033 ~$ cat /proc/cpuinfo |grep 'cache size'|head -1
+cache size      : 8192 KB
+#+end_example
