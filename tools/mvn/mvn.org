@@ -1,0 +1,54 @@
+#+Title: Notes on maven
+
+maven 是一个用来管理java工程的工具，它的功能可以和make做类比，当然maven不像make是一个通用的流程管理工具，而是更加面向java工程。
+比如maven最具特色的功能是自动解决项目的依赖：即自动从网络上下载java工程用到的jar包（当然需要配置下载的源)。
+
+maven的最常见选项:
+1. 指定一个pom.xml文件，类似于 =make -f some-other-makefile= :
+#+begin_src sh
+mvn -f path/to/pom.xml
+#+end_src
+类似的, 可以指定全局或用户的 =settings.xml=
+#+begin_src sh
+mvn -gs global-setting.xml
+mvn -s user-setting.xml
+#+end_src
+
+2. 指定安装jar包的目录(缺省目录是 =~/.m2= )
+#+begin_src sh
+# modify $mvn_install_dir/conf/settings.xml
+# use "which mvn" to get $mvn_install_dir
+# make sure following section presented:
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"...>
+  <localRepository>/home/yuanqi.xhf/work/m2</localRepository>
+</settings>
+#+end_src
+
+3. 编译，打包，测试:
+#+begin_src sh
+mvn compile
+mvn package
+mvn test
+#+end_src
+
+4. 跳过unittest
+#+begin_src sh
+mvn compile -Dmaven.test.skip=true
+#+end_src
+
+5. 指定只测试单一的case:
+#+begin_src sh
+mvn test -Dtest=classnamepattern#methodnamepattern
+#+end_src
+
+6. 测试时排除某些文件(既不参与测试也不参与编译)
+#+begin_src sh
+<groupId>org.apache.maven.plugins</groupId>
+ <artifactId>maven-compiler-plugin</artifactId>
+ <version>2.3.2</version>
+ <configuration>
+   <testExcludes><exclude>**/some-file.java</exclude></testExcludes>
+   <target>1.6</target>
+ </configuration>
+</plugin>
+#+end_src

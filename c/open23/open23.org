@@ -1,0 +1,39 @@
+#+Title: 宏实现函数重载
+
+=man 2 open= 可以清楚的看到， =open()= 有两种形式的原型:
+#+begin_src cpp
+int open(const char *pathname, int flags);
+int open(const char *pathname, int flags, mode_t mode);
+#+end_src
+
+在C语言中是怎么做的呢？借助宏, 有两种方法：
+1. 一种比较简单, 底层提供的函数必须接受三个参数，经过宏扩展之后，两个参数的调用形式会得到一个缺省的值作为第三个参数:
+#+begin_src cpp
+#define open(...) openx(__VA_ARGS__, default_arg)
+#define openx(a, b, c, ...) open3(a, b, c)
+#+end_src
+
+扩展的结果如下:
+#+begin_example
+open(x, y)
+open(x, y, z)
+----------------
+open3(x, y, default_arg)
+open3(x, y, z)
+#+end_example
+
+2. 第二种复杂一些，两个参数和三个参数的形式经过扩展后会调用不同的函数:
+#+begin_src cpp
+#define open(...) openx(__VA_ARGS__, 3, 2)
+#define openx(a, b, c, d, ...) open##d(a, b, c)
+#define open2(a, b, ...) open2_func(a, b)
+#define open3(a, b, c, ...) open3_func(a, b, c)
+#+end_src
+扩展的结果如下:
+#+begin_example
+open(x, y)
+open(x, y, z)
+----------------
+open2_func(x, y)
+open3_func(x, y, z)
+#+end_example

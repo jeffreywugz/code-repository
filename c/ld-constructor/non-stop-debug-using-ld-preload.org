@@ -1,0 +1,40 @@
+#+Title: Non Stop debug and LD\_PRELOAD
+
+不管程序的日志打印得多详细，有时总还需要借助gdb。但是有时我们希望用gdb调试时可以不影响程序的正确执行，
+比如: 有些bug一旦用gdb调试便不会再出现，因为gdb影响了程序的正常执行。
+
+实际上gdb提供了Non-Stop Mode的调试方法，通过如下的方式启用(低版本的gdb不支持):
+#+begin_example
+# Enable the async interface.
+set target-async 1
+     
+# If using the CLI, pagination breaks non-stop.
+set pagination off
+     
+# Finally, turn it on!
+set non-stop on
+#+end_example
+但是当我们要检查程序的状态时，比如用 =print= 命令打印某个变量的值时，程序必然要停在某个线程的某个点上(需要有一个stack frame供gdb使用)，最终还是会影响程序执行。
+当然，如果要查看的是某个函数的栈变量，必须要在运行这个函数时停下，但是很多时候要查看的是全局变量，这时如果有一个额外的线程给我们提供stack frame就可以不影响原始程序的执行了。
+
+要启动另一个额外的线程，并且要尽量不改动原始代码，最简单的方式是使用 =LD_PRELOAD= 机制：首先，要有一个shared library，
+启动调试的程序时设置 =LD_PRELOAD= 环境变量指向这个library，在library中提供一个libc识别的constructor, 加载原始程序时就会调用constructor。
+代码如下:
+#+begin_src cpp
+#include <pthread.h>
+
+void debug_loop()
+{
+  while(1) {
+    pause();
+    // inspect process status here using gdb
+  }
+}
+
+typedef void*(*pthread_handler_t)(void*);
+void __attribute__((constructor)) so_init()
+{
+  pthread_t thread;
+  pthread_create(&thread, NULL, (pthread_handler_t)debug_loop, NULL);
+}
+#+end_src

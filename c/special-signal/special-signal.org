@@ -1,0 +1,30 @@
+#+Title: Notes on Signal
+
+有些signal是针对线程的:
+#+begin_example
+SIGBUS, SIGILL, SIGFPE, SIGSEGV, SIGTRAP
+#+end_example
+
+有些signal是被内核特殊处理的:
+#+begin_example
+SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU,
+#+end_example
+
+有两个signal是不能捕获的:
+#+begin_example
+SIGKILL, SIGSTOP
+#+end_example
+
+signal handler是进程资源，signal mask是线程资源。
+那么如果在收到signal时，需要对不同的线程做不同的处理，要怎么办？即如何在signal handler中区分不同的线程。
+比较简单的做法是调用 =pthread_self()= 获得线程的id, 但是 =pthread_self()= 不保证是 =async-signal-safe= 的，
+虽然一般情况下我们都可以这样假定。stackoverflow上有人建议安全的做法是通过errno的地址查询thread ID, 但是要保证
+errno到thread ID的映射表是可以 =async-signal-safe= 的访问的，这还是比较复杂的。
+
+=async-signal-safe= 的概念：如果一个函数可以在 =signal-handler= 中安全地被调用, 这个函数就是 =async-signal-safe= 的。
+与之相关的两个概念是: 线程安全和可重入.
+线程安全: 如果一个函数在多线程环境下可以安全的执行，这个函数就是线程安全的
+可重入: 一个函数可以在任意位置备打断，然后再次开始新的调用，最后再回到最初的函数中断的地方。
+如果访问共享数据，并且每加锁，那么这段代码就不是线程安全的，但是如果通过加锁实现了线程安全，但是一般来说这段代码不是可重入的，
+因为如果在临界区被打断，就无法再次调用这个函数了。
+可以认为，线程安全的要求要弱一些，可重入的要求要更强一些，并且可重入函数都是 =async-signal-safe= 的。

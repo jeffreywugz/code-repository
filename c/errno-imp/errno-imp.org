@@ -1,0 +1,41 @@
+#+Title: errno的定义
+
+errno是线程安全的吗? 以下的程序可以验证:
+#+begin_src cpp
+int64_t assert_errno(int64_t idx)
+{
+  printf("pthread[%ld]: errno=%ld\n", idx, &errno);
+  return 0;
+}
+
+typedef void*(*pthread_handler_t)(void*);
+int test_errno(const int64_t n_threads, const int64_t n_iter)
+{
+  pthread_t threads[n_threads];
+  for(int64_t i = 0; i < n_threads; i++) {
+    pthread_create(threads + i, NULL, (pthread_handler_t)assert_errno, i);
+  }
+  for(int64_t i = 0; i < n_threads; i++) {
+    pthread_join(threads[i], (void**)&n_err);
+  }
+  return 0;
+}
+#+end_src
+运行结果如下, 不同线程的errno都是不一样的。
+#+begin_example
+pthread[0]: errno=1090156784
+pthread[1]: errno=1092258032
+pthread[2]: errno=1094359280
+...
+pthread[14]: errno=1127074032
+pthread[15]: errno=1129175280
+#+end_example
+
+errno实际被扩展为什么呢?
+#+begin_src sh :exports both :results output
+echo -e '#include <errno.h>\n errno' | cpp | tail -1
+#+end_src
+
+#+RESULTS:
+:  (*__errno_location ())
+

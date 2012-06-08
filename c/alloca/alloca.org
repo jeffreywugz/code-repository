@@ -1,0 +1,41 @@
+#+Title: alloca与/proc/[pid]/map
+
+malloc从heap分配内存，申请之后必须调用free，与malloc对应的还有一个alloca, alloca不是
+从heap分配内存，而是从stack上分配内存，申请之后不用释放，但是申请内存的有效期是从申请成功之后到函数返回之前，
+并且因为stack是有限的资源，所以不适合用来分配大片内存。但是如果在单线程环境下用作临时缓冲区，alloca是非常适合的。
+
+可以从/proc/[pid]/map中看到这两种分配方式的不同:
+1. malloc 10M
+#+begin_example
+cat /proc/<pid>/map
+...
+30c5152000-30c5157000 rw-p 30c5152000 00:00 0
+2ade86310000-2ade86311000 rw-p 2ade86310000 00:00 0
+2ade86360000-2ade86d27000 rw-p 2ade86360000 00:00 0
+7fffe0eb4000-7fffe0ec9000 rw-p 7ffffffea000 00:00 0                      [stack]
+#+end_example
+这里stack大小为:
+#+begin_example
+In [236]: 0x7fffe0ec9000 - 0x7fffe0eb4000
+Out[236]: 86016
+#+end_example
+=[stack]= 上面的一个region大小为:
+#+begin_example
+In [237]: 0x2ade86d27000 - 0x2ade86360000
+Out[237]: 10252288
+#+end_example
+
+2. alloca 10M
+#+begin_example
+30c5152000-30c5157000 rw-p 30c5152000 00:00 0 
+2b8d25a84000-2b8d25a85000 rw-p 2b8d25a84000 00:00 0 
+2b8d25ad4000-2b8d25ad6000 rw-p 2b8d25ad4000 00:00 0 
+7fff8ac44000-7fff8b60a000 rw-p 7fffff639000 00:00 0                      [stack]
+#+end_example
+这里stack大小为
+#+begin_example
+In [235]: 0x7fff8b60a000 - 0x7fff8ac44000
+Out[235]: 10248192
+#+end_example
+
+显然用alloca分配10M的内存后，stack大小增加了10M，但是用malloc分配就不会。

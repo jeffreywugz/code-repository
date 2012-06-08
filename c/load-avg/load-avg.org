@@ -1,0 +1,66 @@
+#+Title: loadavg
+
+uptime, top都会报告1min, 5min, 15min内的load, 这些值也可以通过读/proc/loadavg文件得到。
+
+但是load究竟意味着什么呢？当然load越高，系统越忙，但是准确的含义是什么？
+通常认为load指等待队列的平均长度，等待运行的任务多了，自然load就高，合理的load和CPU核的数目相关，
+16核的系统，load为16，那么平均每个CPU都恰好用满。
+
+首先一个问题是，等待队列是指等待什么事件的队列？
+等待CPU肯定算，比如启动一个进程，创建32个线程，每个线程都做空循环，经过一段时间后，load会稳定在32左右。
+但是等待IO算吗？可以肯定的是，并非任何类型的等待IO都算，因为系统中的任何一个线程，要么在等待CPU，要么在等待IO，要么在sleep,
+如果等待IO也算进load，那么任意时刻，系统的load都会很高。
+但是，大量读写磁盘可定会导致load升高，实际上，如果创建32个线程，不停地读磁盘，进过一段时间后，系统的load甚至会升高到300多。
+
+最后听到专业的解释: 计算load时所说的等待队列是指处于READY(即可以直接运行)状态或UNINTERUPTABLE状态的线程队列。
+所以，如果在等CPU，那么肯定会算进load，如果在等IO，或用信号量同步，是否会算进load，要看内核中代码的实现。
+这就解释了为什么系统空闲时有大量线程在等IO，但是load不高，因为这些线程处于INTERUPTABLE状态，
+但是有时CPU使用率不高，大量线程在做IO，load也很高, 因为这时线程处于UNINTERUPTABLE状态。
+
+把系统load压到300多的测试程序如下: 创建32个线程，每个线程都调用 =get_iops()= 即可。
+#+begin_src cpp
+int get_iops(const char* path, int64_t total_read_ops)
+{
+  int err = 0;
+  int fd = 0;
+  int64_t size = 0;
+  int64_t blk_idx = 0;
+  int64_t start_time = 0;
+  int64_t end_time = 0;
+  printf("get_disk_iops(path=%s, total_read_ops=%ld)\n", path, total_read_ops);
+  if (NULL == path || 0 >= total_read_ops)
+  {
+    err = -EINVAL;
+  }
+  else if (0 > (fd = open(path, O_RDONLY|O_DIRECT)))
+  {
+    err = errno;
+    perror("open");
+  }
+  else if (0 != ioctl(fd, BLKGETSIZE64, &size))
+  {
+    err = errno;
+    perror("ioctl");
+  }
+  else
+  {
+    printf("%s size=%ld\n", path, size);
+  }
+  start_time = get_usec();
+  for(int64_t s = 0; 0 == err && s < total_read_ops; s++)
+  {
+    blk_idx = random() % (size/block_size);
+    lseek(fd, blk_idx * block_size, SEEK_SET);
+    if (0 >= read(fd, file_block, block_size))
+    {
+      err = errno;
+      perror("read");
+    }
+  }
+  end_time = get_usec();
+  printf("read ops: %ld/%ldus = %.2fOPS/s\n", total_read_ops, end_time - start_time, 1e6 * total_read_ops/(end_time - start_time + 1));
+
+  lseek(fd, 0, SEEK_SET);
+  return err;
+}
+#+end_src

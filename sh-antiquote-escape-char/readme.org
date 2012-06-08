@@ -1,0 +1,48 @@
+#+Title: Shell antiquote with Escape Char
+我们经常会写如下的命令:
+#+begin_src sh
+bash $ for i in `ls src/*.cpp`; do g++ -c $i; done
+#+end_src
+这表示编译 =src= 目录下的所有的 =cpp= 文件, 当然这只是一个例子，实际有更好的替代做法。
+
+但是这里面有一个陷阱: 在有些机器上 =ls= 被 =alias= 掉了:
+#+begin_src sh
+bash $ which ls
+alias ls='ls --color'
+        /bin/ls
+#+end_src
+如果是这样， =ls= 的输出就会包含 =Escape Char= , 可以用个程序验证:
+#+begin_src cpp
+#include <stdio.h>
+#include <string.h>
+
+int main(int argc, char *argv[])
+{
+  for(int i = 0; i < argc; i++)
+  {
+    printf("argv[%d]=%s,len=%ld\n", i, argv[i], strlen(argv[i]));
+  }
+  return 0;
+}
+#+end_src
+
+用如下命令测试:
+#+begin_src sh
+yuanqi.xhf@tfs035040 sh-antiquote-escape-char$ make
+gcc -o echo echo.c --std=c99
+for i in s --color * do ./echo $i; done
+argv[0]=./echo,len=6
+argv[1]=echo,len=22
+argv[0]=./echo,len=6
+argv[1]=echo.c,len=16
+argv[0]=./echo,len=6
+argv[1]=Makefile,len=18
+argv[0]=./echo,len=6
+argv[1]=readme.org,len=20
+argv[0]=./echo,len=6
+argv[1]=,len=3
+#+end_src
+明显，打印出来的字符串，和我们期望的长度是不匹配的，如果我们的程序接受这些参数，
+往往会产生莫名其妙的错误，更要命的是我们看错误日志却发现不了任何异常，除非你把这些字符串长度打印出来。
+比如如果我们的程序用 =atoi(argv[1])= 转换字符串为数字，有可能看起来 =argv[1]= 是个合法的数字，
+但因为escape char的存在，atoi返回值为0。

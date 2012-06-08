@@ -1,0 +1,31 @@
+#+Title: truncate after mmap
+
+如果mmap成功之后，但是文件又被truncate了，那么访问mmap的区域会如何了？
+下面的程序可以验证：
+#+begin_src cpp
+int test_mmap_truncate(const char* path)
+{
+  int err = 0;
+  char* buf = NULL;
+  int64_t len = sizeof(int64_t);
+  if (0 != (err = file_map_write(path, len, &buf)))  {
+    fprintf(stderr, "file_map_write(%s)=>%s\n", path, strerror(err));
+  }  else if (0 != truncate(path, 0))  {
+    fprintf(stderr, "truncate(%s)=>%s\n", path, strerror(errno));
+  }  else  {
+    printf("file[%s] truncate to 0\n", path);
+    buf[0] = 0;
+    printf("access buf[mapped %s] success\n");
+  }
+  return err;
+}
+#+end_src
+实际运行结果如下, 在truncate之后，访问mmap的内存，会出现Bus Error， 程序退出之后，文件大小是trucate之后的值。
+#+begin_example
+gcc -lpthread -std=c99 -D_GNU_SOURCE -o mmap-truncate.exe mmap-truncate.c
+./mmap-truncate.exe
+file[./file.map] truncate to 0
+make: *** [mmap-truncate.test] Bus error
+#+end_example
+
+Done.
