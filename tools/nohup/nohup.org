@@ -1,0 +1,27 @@
+#+Title: nohup
+
+通常我们这样使用nohup:
+#+begin_src sh
+nohup ./a.sh &
+#+end_src
+这样nohup就会在后台执行 ./a.sh, 并且把标准输出和标准错误重定向到 nohup.out.
+
+但是问题出现在用ssh远程执行nohup时:
+#+begin_src sh
+ssh 10.232.36.33 'nohup ./a.sh &'
+#+end_src
+*以上命令会等待 ./a.sh结束，并且把它的输出传输到本地。这不是我们预期的。*
+
+当然，要解决这个问题，可以显式地重定向:
+#+begin_src sh
+ssh 10.232.36.33 'nohup ./a.sh >a.output &'
+#+end_src
+
+但问题在于为什么用ssh执行命令和直接在终端执行命令，nohup的表现不一致?
+这两者的区别在于，nohup的标准输出和标准错误是否是tty，如果是，nohup就会在启动子进程之前，把标准输出和标准错误重定向到'nohup.out',
+如果不是，nohup什么都不会做。
+
+这样对上面的问题，我们有另一个种解决方法:
+#+begin_src sh
+ssh -t 10.232.36.33 'nohup ./a.sh &'
+#+end_src

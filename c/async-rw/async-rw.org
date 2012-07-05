@@ -1,0 +1,54 @@
+#+Title: async read write file use dio
+#+Options: toc:nil
+
+今天测试了异步读写文件时，如果写是追加写，读取时是否是安全的。
+即测试是否会读取到不正确的数据。验证方法如下:
+1. 一个线程写数据, 追加写，写下的每个字节都是一个特点的字符，比如字符 'c'
+2. 多个线程读数据，从文件最开始向后读，读到数据之后检查是否每个字节都是 'c', 如果不是，就表明发生了错误。
+
+测试结果表明, 不管使用buffered IO还是Direct IO，不管是否使用 =O_APPEND= mode打开，读取都不是安全的。
+
+* 不使用APPEND mode打开文件
+#+begin_example
+./async-rw.exe 1024
+...
+total_read_err=15
+#+end_example
+
+* 使用APPEND mode打开文件
+#+begin_example
+use_append_mode=true ./async-rw.exe 1024
+...
+total_read_err=33
+#+end_example
+
+* 使用buffered IO读写文件
+#+begin_example
+write_use_buffered_io=true read_use_buffered_io=true ./async-rw.exe 1024
+write file do not use append mode
+write use buffered io
+read use buffered io
+...
+total_read_err=3
+#+end_example
+
+* Direct IO写文件，buffered IO读文件
+#+begin_example
+use_append_mode=true read_use_buffered_io=true ./async-rw.exe 1024
+write file use append mode
+write use direct io
+read use buffered io
+...
+total_read_err=378
+#+end_example
+
+对异步读写文件的一些补充测试:
+* 单个读者
+单个读者的情况下没有测出问题。测试读写1G的文件没有出错.
+
+* 多个读者
+测了以下几种情况:
+1. 每个读者使用不同的fd
+2. 所有读者共享一个fd
+3. 读者写者共享fd
+经过测试，不管是那种方式共享fd，只要有多个读者，读取就会有问题。

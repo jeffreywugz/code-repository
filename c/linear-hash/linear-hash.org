@@ -1,0 +1,91 @@
+#+Title: 线性hash插入和调整
+
+线性hash可以实现动态调整hash表大小，http://en.wikipedia.org/wiki/Linear_hashing
+
+不考虑并发，线性hash实现非常容易，插入和调整算法如下:
+特别要注意的是，调整算法的实现依赖于插入算法，每次调整只改动一个已经映射的slot，rehash也就是把这个slot的kv-pair先删除，然后再重新插入。
+
+插入时根据used和limit两个变量觉得要插入的kv-pair是落在 0-limit之间，还是limit-used之间。
+#+begin_src cpp
+template<typename T>
+class HashMap
+{
+  public:
+    HashMap(int64_t capacity): used_(1), limit_(1), capacity_(capacity) {
+      memset(slots_, 0, sizeof(T*) * capacity);
+    }
+    ~HashMap() {}
+    static HashMap* create(int64_t capacity) {
+      HashMap* map = (typeof(map))malloc(sizeof(*map) + sizeof(T*) * capacity);
+      if (map){
+        map = new(map) HashMap(capacity);
+      }
+      return map;
+    }
+    int64_t get_slot_idx(const int64_t hash) const {
+      return (hash % (2 * limit_) < used_)?  hash % (2 * limit_): hash % limit_;
+    }
+    T** get_slot(const int64_t hash) const {
+      return const_cast<T**>(slots_ + get_slot_idx(hash));
+    }
+    int insert(T* value) {
+      int err = 0;
+      T** slot = get_slot(value->hash());
+      value->next_ = *slot;
+      *slot = value;
+      return err;
+    }
+    int expand() {
+      int err = 0;
+      T** adjust_slot = NULL;
+      T* p = NULL;
+      T* q = NULL;
+      limit_ <<= (++used_ > 2 * limit_? 1: 0);
+      adjust_slot = get_slot(used_ -1);
+      p = *adjust_slot;
+      *adjust_slot = NULL;
+      for(; 0 == err && p; p = q){
+        q = p->next_;
+        p->next_ = NULL;
+        if (0 != (err = insert(p)))
+        {
+          fprintf(stderr, "insert(p=%p)=>%d\n", p, err);
+        }
+      }
+      return err;
+    }
+    int lookup(T* key, T*& value) const {
+      int err = 0;
+      for(value = *get_slot(key->hash()); value; value = value->next_) {
+        if (key->equal(value))
+          break;
+      }
+      return err;
+    }
+  private:
+      int64_t used_;
+      int64_t limit_;
+      int64_t capacity_;
+      T* slots_[0];
+};
+#+end_src
+
+实际测试结果如下，共插入和查找1千万项数据。
+1. 如果保持slot的数目与插入item数相等:
+#+begin_example
+insert: 966ms
+lookup: 1478ms
+#+end_example
+
+2. 如果保持slot数目是插入item数目的两倍:
+#+begin_example
+insert: 1283ms
+lookup: 1177ms
+#+end_example
+
+3. 如果保持slot数目是插入item数目的一半:
+#+begin_example
+insert: 638ms
+lookup: 2161ms
+#+end_example
+由此可见，slot数目增大，查找效率变高，但是增大的好处随着slot与item数目的比变大也越来越少。

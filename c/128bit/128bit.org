@@ -1,0 +1,27 @@
+#+Title: 128bit type
+
+在64位机器上，gcc支持128bit的int类型, 用 =__int128_t= 或 =__uint128_t= 指明类型，这种类型和普通的int一样支持加减乘除，位运算。
+
+下面这个程序可以说明 =__uint128_t= 表示的范围确实如预期一样被扩展了。
+#+begin_src cpp
+#define str_bool(x) (x)? "true": "false"
+int main(int argc, char *argv[])
+{
+  __uint64_t max64 = ~0;
+  __uint128_t i128 = max64;
+  max64++;
+  i128++;
+  printf("max64 eval to %s, i128 eval to %s", str_bool(max64), str_bool(i128));
+  return 0;
+}
+#+end_src
+输出:
+#+begin_example
+max64 eval to false, i128 eval to true
+#+end_example
+
+经过测试, =__uint128_t= 的加法运算比 =__uint64_t= 的加法运算要慢, 大约慢 =10%= , 基本可以接受。
+#+begin_example
+calc with __uint64_t[loop=268435456] use 1351ms
+calc with __uint128_t[loop=268435456] use 1519ms
+#+end_example

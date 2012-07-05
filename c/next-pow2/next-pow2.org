@@ -1,0 +1,34 @@
+#+Title: next power of 2
+
+计算比某个数x大的2的n次幂在线性hash扩容的时候有用，当然不考虑它的用处，这个问题本身也是比较有趣的。
+
+最朴素的算法这里就不描述了，首先给出最优的解， gcc提供一个内置的函数， =__builtin_clz(x)= 它可以计算一个数前导零的个数，
+利用它可以直接计算下一个2的n次幂。
+#+begin_src cpp
+int64_t next_pow2_by_clz(int64_t x)
+{
+  return x <= 2? x: (1LL << 63) >> __builtin_clz(x - 1);
+}
+#+end_src
+
+这里还有一个比较有趣的算法，它把数x的低位全置为1，这里低位指比最高位1低的位, 最后将结果加1就得到2的n次幂了。
+#+begin_src cpp
+int64_t next_pow2(int64_t x)
+{
+  x -= 1;
+  x |= (x >> 1);
+  x |= (x >> 2);
+  x |= (x >> 4);
+  x |= (x >> 8);
+  x |= (x >> 16);
+  x |= (x >> 32);
+  return x + 1;
+}
+#+end_src
+
+最后测的速度是:
+#+begin_example
+./next-pow2.exe 10240
+next_pow2_by_clz(10240/45=227/us)
+next_pow2(10240/83=123/us)
+#+end_example

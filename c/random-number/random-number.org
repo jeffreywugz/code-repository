@@ -1,0 +1,46 @@
+#+Title: random number generator
+#+Options: toc:nil
+
+glibc提供的标准random()函数有以下的限制:
+** 多线程访问不安全
+如果只是要一个随机数字，似乎不用关心多线程安全的问题，但实际并非如此，
+比如要用随机数生成器产生实验用数据，并且希望实验可重复，特别的如果用随机产生的数据进行正确性验证，
+这就需要保证只要提供相同的种子，即使在多线程环境下，每次生成的随机数序列也要保证是一样的。
+
+** 多线程访问慢
+这是因为随机数生成器依赖于一个全局状态。
+
+** 精度不够
+#+begin_src sh :exports both :results output
+echo -e '#include <stdlib.h>\n RAND_MAX'|cpp|tail -1
+#+end_src
+
+#+RESULTS:
+: 2147483647
+
+要解决上面的问题，主要是要做到:
+1. 提供可重入版本的随机数生成器，随机数生成器状态由使用者维护
+2. 输出至少是64bit的，那么内部状态至少要128bit
+
+下面提供了一个汇编实现的随机数生成器: s是由三个 =uint64_t= 的整数表示内部状态的。
+#+begin_src cpp
+static uint64_t rng64(uint64_t *s)
+{
+  uint64_t c = 7319936632422683419ULL;
+  uint64_t x = s[1];
+  
+  /* Increment 128bit counter */
+  s[0] += c;
+  s[1] += c + (s[0] < c);
+  
+  /* Two h iterations */
+  x ^= (x >> 32) ^ s[2];
+  x *= c;
+  x ^= x >> 32;
+  x *= c;
+  
+  /* Perturb result */
+  return x + s[0];
+}
+#+end_src
+经过测试，6s的时间可以生成10亿的随机数。

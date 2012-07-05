@@ -1,9 +1,5 @@
-target = fadvise-seq
-fadvise-seq.args = 10240000000
-memcpy.args = 1024000000
-memcmp.args = 
-mem-param.args = 1024 8 1000000
-gcc-opt.args = 
+target = madvise-nouse
+madvise-nouse.args = 1024000000
 cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99 -O3 -D_GNU_SOURCE

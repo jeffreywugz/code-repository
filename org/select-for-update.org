@@ -1,0 +1,19 @@
+#+Title: select for update/share
+
+除了4种标准的隔离级别可用：read uncommited, read commited, repeatable read, serializable.
+
+MySQL和Oracle还提供了select ... for update/select ... lock in share mode, 这实际上是由用户显式地对数据加读写锁。
+当然在serializable隔离级别下，用户没有必要显式加锁， select ... for update/select ... lock in share mode是在更低的隔离级别下做并发控制用的。
+
+它们的语义和读写锁很像，在用select ... for update对某些数据加锁后，对相同数据的select ... for update/select ... lock in share mode操作就会失败。
+在用select ... in share mode对某些数据加锁之后，对相同数据的select ... for update操作会失败，但是select ... in share mode可以成功。
+在select ... for update之后，普通的读可能成功，也可能失败，这依赖于隔离级别。
+
+select ... in share mode最直接的一个应用是用来保证一个表对另一个表的引用关系始终有效，比如有两个表，表A和表B， 表B中的每一行都是对表A中某一行的引用。
+如果要对表A中的某些行在表B中新增一个对应的行，可以先对表A中的这些行执行select ... in share mode操作，保证在向表B中插入对应行时，表A中的这些行不被修改。
+一个更实际的例子是如何在snapshot隔离级别的基础上，实现以下两个事务的串行化:
+T1: A = B + 1, T2: B = A + 1
+只要对A或B显式地执行select ... in share mode就可以保证可串行化。
+
+select ... for update最直接的应用是实现counter，先用select ... for update读出某一行，然后对结果加1，最后在更新这一行。
+当然简单的加1操作没必要这么做，一个更实际的例子是转账，需要修改两个变量，用select ... for update就可以实现。

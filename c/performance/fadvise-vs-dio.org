@@ -1,0 +1,15 @@
+#+Title: fadvise(noreuse) vs DIRECT IO
+
+为了不污染page cache，如果只是顺序读写一遍大文件，有两种方案可选:
+1. 使用DIRECT IO，这种方法比较有保证，但缺点是我们读写文件必须是按block对齐的
+2. 使用Buffered IO, 但是使用fadvise()指明我们的对文件的访问是顺序的，并且不会重用。
+   这种方法由于只是给出一种advise， 内核可以选择忽略我们的请求，最终可能还是会污染page cache
+实际经过测试，发现即使使用 =posix_fadvise(POSIX_FADV_NOREUSE)= ，page cache还是不停增长，但是使用DIRECT IO就不会有这个问题。
+
+测试前先清空page cache:
+#+begin_src sh
+sudo bash -c "echo 3 > /proc/sys/vm/drop_caches"
+#+end_src
+先写后读1G的文件，如果使用buffered IO加fadvise, page cache最后增长到了700+M
+
+但是使用DIRECT IO, page cache最后会保持不变。

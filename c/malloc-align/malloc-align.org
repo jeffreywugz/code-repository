@@ -1,0 +1,22 @@
+#+Title: malloc align
+
+要申请边界对齐的内存，可以用 =posix_memalign()=
+用法如下:
+#+begin_example
+if (0 != (err = posix_memalign((void**)&p, align, size)))
+{
+  fprintf(stderr, "posix_memalign(align=%ld, size=%ld)=>%d", align, size, err);
+}
+// after use
+{
+  free(p);
+}
+#+end_example
+
+申请对齐的内存要比不对齐的内存低效, 对比如下:
+#+begin_example
+yuanqi.xhf@tfs035040 malloc-align$ time ./malloc-align.exe 1024000 # 使用malloc()申请
+real    0m0.088s
+yuanqi.xhf@tfs035040 malloc-align$ time ./malloc-align.exe 1024000 # 使用posix_memalign()申请
+real    0m9.199s
+#+end_example

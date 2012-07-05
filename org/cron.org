@@ -1,0 +1,31 @@
+#+Title: add cron job
+
+定时执行任务当然很容易实现，鉴于crond已经把这项工作做的很好了，所以依赖于crond是个比较好的选择。
+
+这里记录一个使用crond执行每日定时任务的方法.
+首先修改 =/var/spool/cron/$USER= 文件，增加一项纪录：
+#+begin_example
+yuanqi.xhf@tfs035040 deploy$ sudo cat /var/spool/cron/yuanqi.xhf
+0 0 * * * /home/yuanqi.xhf/run-schedule.sh >> /home/yuanqi.xhf/schedule.output
+#+end_example
+
+这里把需要每日定期执行的任务都放在 =run-schedule.sh= 这个脚本里，目的是修改起来更方便。
+#+begin_example
+yuanqi.xhf@tfs035040 deploy$ cat ~/run-schedule.sh
+work_dir=$(dirname $(readlink -f $0))
+echo "--------------------------------------------------------------------------------"
+echo "[`date +%Y-%m-%d-%H:%M:%S`] $USER@$(hostname) $work_dir \$"
+for script in `find /home/yuanqi.xhf -maxdepth 2 -name '*.schedule'`; do
+    dir=$(dirname $script)
+    file=$(basename $script)
+    echo "[`date +%Y-%m-%d-%H:%M:%S`] $USER@$(hostname) $dir$ $script"
+    (cd $dir; ./$file)
+done
+#+end_example
+
+=run-schedule.sh= 脚本就会在 =$HOME= 目录下寻找后缀名为 =.schedule= 的脚本，依次执行它们。这样就使得添加一项新的定时任务变得极为方便。
+比如，要想每天定期备份自己的某个目录到另一台机器, 只需要创建一个 =rsync.schedule= 的脚本放在这个目录即可。
+#+begin_example
+yuanqi.xhf@tfs035040 deploy$ cat ~/rsync.schedule 
+rsync -az . 10.232.36.33:`pwd`
+#+end_example

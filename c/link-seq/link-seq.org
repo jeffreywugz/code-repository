@@ -1,0 +1,49 @@
+#+Title: link order matters
+
+=gcc= 在链接多个 =.o= 文件时，顺序是无关紧要的，但是如果把 =.o= 转成 =.a= 文件，传递给链接器的顺序就重要了。
+比如下面的三个文件:
+
+1. =link-seq.c=
+#+begin_src cpp
+void foo();
+int main(int argc, char *argv[])
+{
+  foo();
+  return 0;
+}
+#+end_src
+
+2. =foo.c=
+#+begin_src cpp
+void bar();
+void foo(){ bar(); }
+#+end_src
+
+3. =bar.c=
+#+begin_src cpp
+void foo();
+void bar(){ foo(); }
+#+end_src
+
+如果生成 =.o= 文件后再链接， 不管顺序怎样，都没有问题。
+如果把 foo.c, bar.c 编译成 foo.a bar.a 再链接，就有问题.
+要想编译通过，需要调整顺序:
+#+begin_example
+yuanqi.xhf@tfs035040 link-seq$ make -k
+gcc -o bar.o -c bar.c
+gcc -o foo.o -c foo.c
+gcc -o link-using-obj-file link-seq.c bar.o foo.o   # <------- 编译成功
+ar r bar.a bar.o
+ar: creating bar.a
+ar r foo.a foo.o
+ar: creating foo.a
+gcc -o link-using-static-lib-wrong-order link-seq.c bar.a foo.a # <----- 编译失败
+foo.a(foo.o): In function oo':
+foo.c:(.text+0xa): undefined reference to ar'
+collect2: ld returned 1 exit status
+make: *** [link-using-static-lib-wrong-order] Error 1
+gcc -o link-using-static-lib-correct-order link-seq.c foo.a bar.a # <----- 编译成功
+#+end_example
+链接器设计成这个样子应该主要是考虑到如果把遇到的每一个静态库的符号表全记下来，占用的资源太多，
+所以只把 =.o= 文件或前面的 =.a= 文件中未找到的符合记下来，其余的符合就直接丢弃了，所以如果链接顺序错了有些符合就找不到了。
+但是 =.o= 文件中的所有符号原本就要记录下来，所以不管顺序是什么样的都无所谓。
