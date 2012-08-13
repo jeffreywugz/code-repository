@@ -1,0 +1,19 @@
+#+Title: noinline
+
+考虑如下一个测试性能的代码片段:
+#+begin_src cpp
+int64_t x = 0;
+for(int64_t i = 0; i < n; i++)
+{
+  x += mul(3, 4);
+}
+#+end_src
+如果 =mul()= 是个纯函数，并且没有输出x的值，这段代码不会起作用，因为gcc把整个循环包括函数调用优化掉了。
+所以为了测试性能，至少需要把x的值输出。
+
+但是因为 =mul()= 是个纯函数，所以gcc的另一个优化会导致 =mul()= 之后被调用一次，这个优化只是在inline展开之后才会有，
+所以应该声明禁止 =mul()= 函数被inline.
+#+begin_src cpp
+int64_t __attribute__((noinline)) mul(int64_t x, int64_t y);
+#+end_src
+

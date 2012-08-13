@@ -1,7 +1,7 @@
 target = mac
 cc = gcc
 cxx = g++
-cflags = -lpthread
+cflags = -lpthread -std=c99
 cxxflags = -lpthread
 
 all: mac.run

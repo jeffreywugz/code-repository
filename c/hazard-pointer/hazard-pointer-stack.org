@@ -1,0 +1,112 @@
+#+Title: Hazard Pointer Stack
+
+如果不考虑回收内存, 无锁堆栈可以用如下的方式实现:
+#+begin_src cpp
+class Stack {
+  public:
+    Stack(): top_(NULL) {}
+    ~Stack() {}
+    int push(Node* node) {
+      int err = 0;
+      node->prev_ = top_;
+      if (!__sync_bool_compare_and_swap(&top_, node->prev_, node))
+      {
+        err = -EAGAIN;
+      }
+      return err;
+    }
+    int pop(Node*& node) {
+      int err = 0;
+      if (NULL == (node = top_))
+      {
+        err = -EAGAIN;
+      }
+      else if (!__sync_bool_compare_and_swap(&top_, node, node->prev_))
+      {
+           err = -EAGAIN;
+      }
+      return err;
+    }
+  private:
+    Node* top_;
+};
+#+end_src
+
+但是考虑到内存重用，上面的代码会有ABA problem，http://en.wikipedia.org/wiki/ABA_problem.
+可以用hazard pointer解决这个问题:
+#+begin_src cpp
+class Stack {
+    int pop(Node*& node) {
+      int err = 0;
+      if (NULL == (node = top_))
+      {
+        err = -EAGAIN;
+      }
+      else if (0 != (err = add_hazard_pointer(node)))
+      {}
+      else
+      {
+         if (!__sync_bool_compare_and_swap(&top_, node, node->prev_))
+           err = -EAGAIN;
+         del_hazard_pointer(node);
+      }
+      return err;
+    }
+};
+#+end_src
+
+继续考虑lockless的stack的实现, hazard pointer和对应的allocator的接口定义如下：
+#+begin_src cpp
+class HazardSet
+{
+  public:
+    int add(void* p);
+    int del(void* p);
+    int is_exist(void* p);
+};
+
+class Allocator
+{
+  public:
+    int alloc(Node*& node);
+    int free(Node*& node);
+    int add_hazard(Node* node);
+    int del_hazard(Node* node);
+  private:
+    HazardSet hazard_set_;
+};
+#+end_src
+高效的实现一个通用的hazard pointer还是比较难的，但是一般情况下一个数据结构只需要用到1个或两个hazard pointer，所以不必要考虑hazard pointer
+数量很大的情况，但是需要考虑到如何实现线程局部的存储。
+
+stack pop的代码有个地方有bug，做如下修改:
+#+begin_src cpp
+class Stack {
+    int pop(Allocator* allocator, Node*& node) { 
+      int err = 0;
+      int tmp_err = 0;
+      if (NULL == allocator)
+      {
+        err = -EINVAL;
+      }
+      else if (NULL == (node = top_))
+      {
+        err = -EAGAIN;
+      }
+      else if (0 != (err = allocator->add_hazard(node)))
+      {}
+      else
+      {
+        if (top_ != node || !__sync_bool_compare_and_swap(&top_, node, node->prev_))
+        {
+          err = -EAGAIN;
+        }
+        if (0 != (tmp_err = allocator->del_hazard(node)))
+        {
+          err = tmp_err;
+        }
+      }
+      return err;
+    }
+};
+#+end_src

@@ -1,0 +1,31 @@
+#+Title: Transaction Schedule
+在数据库领域，schedule是指一段时间内开始和结束的事务所执行的操作的时间顺序。
+有两种描述方法, 首先是用表格描述, T1，T2表示两个事务，列描述的是时间的先后顺序。
+#+begin_example
+   T1    T2
+--------------
+  R(X)
+        R(Y)
+  W(X)
+        W(Y)
+  Com.  Com.
+#+end_example
+另一种方法是用文本描述， 上面的表格等价与: R1(X)R2(Y)W1(X)W2(Y)COM1COM2
+
+当然并非任意的两个时间都有先后顺序，所以要完整的描述schedule，必须用有向无环图。
+但是讨论大部分问题使用上面的描述方法就足够了。
+特别要区分以下几种schedule:
+1. serial: 事务实际是串行执行的。
+2. view-serializable: 事务实际上可能是并发执行的，但从效果上看起来是可串行的。
+3. Conflict-serializable: 事务实际上可以并发执行，但是所有conflict必须按照某种serial schedule的方式被排序。
+   这里conflict定义是: 任意两个操作(读或写)，如果至少有一个操作是写，并且它们操作同一个数据对象，那么这两个操作就conflict。
+   所有conflict要按照某种serial schedule的方式被排序，这意味着能找到一个串行执行这些事务的schedule，并且
+   任意两个conflict操作的发生的相对顺序与这种串行schedule的相对顺序一致。
+4. commitment-ordered: 也被简称为CO。 CO首先必须满足conflict-serializable的条件，并且进一步要求conflict-serializable对应的
+   串行化执行顺序就是CO schedule时事务的提交顺序。
+   
+从定义上看conflict-serializable必然是view-serializable的，因为只要conflict的操作顺序等价，那么从效果上是无法区分两种schedule的。
+但是如果只是要求看起来可串行化，那么不必要求所有的conflict的操作顺序都等价，因为有些操作对外是没有效果的。
+比如一连串无条件的写操作，W1(x)W2(x)W3(x), 写本身不依赖于任何操作，如果没有其他事务要读x, 那么只要最后执行的操作是W3(x),
+那么从效果上无法区分W1(x)W2(x)和W2(x)W1(x), 所以如果遇到这样的操作序列，view-serializable与conflict-serializable相比
+便有更大的调度自由。

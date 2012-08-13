@@ -1,0 +1,49 @@
+#+Title: hide implementation detail without runtime cost in CPP
+
+cpp要求一个类把private成员和函数都在头文件中声明，这某种程度上把实现的细节暴露给了使用这个类的用户。
+后果就是当实现细节变化时，所有相关代码都需要重新编译。
+
+当然为了更好的把接口和实现分开，比较简单的做法是使用虚函数。在头文件中定义一个接口，只包含public成员和函数，并且把成员函数声明为virtual：
+#+begin_src cpp
+// 在.h文件中声明Interface
+class Interface{
+public:
+  Interface(){}
+  virtual ~Interface(){}
+  int x;
+  virtual int foo() = 0;
+};
+// 在.cpp文件中实现Interface
+class Implementation: public Interface
+{...
+};
+#+end_src
+这种方法的代价是运行时对接口的调用需要查虚函数表。
+
+如果只是为了封装实现细节，而不关心多态，是有办法消去虚函数调用的开销的。
+代码和上面很像: 在头文件中声明接口，在cpp文件中实现，但是Interface中的函数不是虚的，而是直接把调用转发给子类。
+当然这里假定用户虽然看到的是Interface，但是实际拿到的就是Implementation，使用时不能直接声明Interface对象，
+而必须要调用接口构造Interface对象, 也就是说必须要配合factory模式使用。
+#+begin_src cpp
+// 在.h文件中声明Interface
+class Interface{
+public:
+  Interface(){}
+  ~Interface();
+  int x;
+  int foo();
+};
+// 在.cpp文件中实现Interface
+class Implementation: public Interface
+{...
+};
+
+// Interface::foo()直接把调用转发给实现者。
+int Interface::foo()
+{
+   return ((Implementation*)this)->foo();
+}
+#+end_src
+
+当然也可以在Interface中使用一个指针指向Implementation, 这样就可以在Interface的构造函数中构造一个Implementation对象, 
+可以不必配合factory模式使用了。这种方法用的比较多，叫PimplIdiom(http://c2.com/cgi/wiki?PimplIdiom), 代价是多了一次间接寻址。

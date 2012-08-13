@@ -1,0 +1,56 @@
+#+title: Template Note
+#+options: toc:nil
+
+* 不同的template参数一定会导致不同的class吗?
+如果一个template class完全不依赖于任何template参数，情况也是如此吗？
+更进一步，具现化的不同的class会共享相同的函数吗?
+#+begin_src cpp
+template<typename T>
+struct TS1
+{
+  static int static_func()
+  {
+  }
+  static int* get_static_var_addr()
+  {
+    static int var_x;
+    return &var_x;
+  }
+};
+int main()
+{
+  int err = 0;
+  printf("&TS1<int>::static_func() == %p, &TS1<char>::static_func() == %p\n", TS1<int>::static_func, TS1<char>::static_func);
+  printf("&TS1<int>::get_static_var_addr() == %p, &TS1<char>::get_static_var_addr() == %p\n", TS1<int>::get_static_var_addr(), TS1<char>::get_static_var_addr());
+  return err;
+}
+#+end_src
+
+输出如下:
+#+begin_example
+&TS1<int>::static_func() == 0x4005de, &TS1<char>::static_func() == 0x4005e4
+&TS1<int>::get_static_var_addr() == 0x600b50, &TS1<char>::get_static_var_addr() == 0x600b4c
+#+end_example
+可以看到，不同class的静态函数是不同的，用 =-O3= 编译也是如此，所以可以认为不同的模板参数一定导致不同的class，并且不同的class一定用不同的函数实现。
+
+* 字符串不能作为模板参数
+如下的代码不能通过编译:
+#+begin_src cpp
+template<const char* id>
+struct TS2
+{
+};
+
+int main()
+{
+  TS2<"default"> a1;
+  return 0;
+}
+#+end_src
+报错如下:
+#+begin_example
+template-note.cpp:36: error: ‘"default"’ is not a valid template argument for type ‘const char*’ because string literals can never be used in this context
+#+end_example
+这个错误不太容易理解，实际错误的原因是因为字符串常量的地址只有在链接时才能定下来，但是模板必须在编译时就具现化，所以错误。
+如果使用一个具体的值作为模板参数，就可以通过编译，只不过一般来讲这样就没多大意义了。
+

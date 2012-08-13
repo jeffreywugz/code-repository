@@ -1,0 +1,33 @@
+#+Title: stl set insert
+
+同事提出一个问题: STL set是顺序插入快，还是随机插入快?
+STL set使用红黑树实现，如果顺序插入，那么每次必然会在树的最右边的最后一个叶子上插入，
+调整代价比随机插入大，但是可以保证树完美的平衡，所以在节点数较少时，顺序插入性能较差，
+但是当节点数够多时，顺序插入比随机插入性能会好很多，因为随机插入的情况下，从根到叶子最长
+的路径是最短路劲的2倍。所以粗略估算，随机插入的时间是顺序插入的1.5倍:
+#+begin_example
+随机插入所用的时间:
+    1/2 * 1 + 1/2 * 2
+ 节点数 * 路劲长度 + 节点数 * 路劲长度
+#+end_example
+实际测试结果如下,
+当插入10000节点时，随机插入更快
+#+begin_example
+rand insert 10000, time=10031us
+seq insert 10000, time=10184us
+#+end_example
+当插入100000节点时，随机插入更快
+#+begin_example
+rand insert 100000, time=126348us
+seq insert 100000, time=129267us
+#+end_example
+当插入1000000节点时，顺序插入更快, 随机插入时间大概比顺序插入多用0.28的时间，和预期还差很远:
+#+begin_example
+rand insert 1000000, time=2078642us
+seq insert 1000000, time=1568608us
+#+end_example
+当插入10000000节点时，随机插入比顺序插入多用0.57的时间，和预期很接近了。
+#+begin_example
+rand insert 10000000, time=30263140us
+seq insert 10000000, time=19086340us
+#+end_example

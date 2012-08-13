@@ -13,7 +13,7 @@ if (0 != (err = posix_memalign((void**)&p, align, size)))
 }
 #+end_example
 
-申请对齐的内存要比不对齐的内存低效, 对比如下:
+申请对齐的内存要比不对齐的内存慢很多, 对比如下, 申请和释放100万次，每次申请1M边界对齐的1M大小的内存:
 #+begin_example
 yuanqi.xhf@tfs035040 malloc-align$ time ./malloc-align.exe 1024000 # 使用malloc()申请
 real    0m0.088s

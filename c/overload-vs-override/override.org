@@ -1,0 +1,39 @@
+#+Title: overload vs override
+
+overload表示多个不同签名的函数之间的关系, 比如:
+#+begin_src cpp
+int func();
+int func(int x);
+int func(int x, int y);
+#+end_src
+编译器会根据实际调用的参数选择不同的函数去调用。
+
+override表示子类与父类自己同名函数的关系，比如:
+#+begin_src cpp
+class A
+{
+  public:
+    int foo(int x) {
+      return 1;
+    }
+};
+
+class B: public A
+{
+  public:
+    int foo(int x, int y){
+      return 2;
+    }
+};
+#+end_src
+=B::foo()= override =A::foo()= , 值得注意的是，override并不关心函数的参数, 所以一旦子类override了父类的一个同名函数，
+便不能期望编译器根据参数类型选择调用父类的函数。比如, 下面的代码是错误的:
+#+begin_src cpp
+B b;
+b.foo(1);
+#+end_src
+要调用父类的方法，需要显式指定,
+#+begin_src cpp
+B b;
+b.A::foo(1);
+#+end_src

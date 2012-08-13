@@ -1,0 +1,15 @@
+#+Title: lea指令的另类用法
+lea是一条汇编指令，它的意思是 =load effective address= ，即用来计算地址的，用法如下:
+#+begin_example
+lea (%rax, %rbx, 3), %rcx
+#+end_example
+它会把 =%rax + %rbx * 3= 的值放到 =%rcx= 寄存器。通常这用来在数组寻址时使用，
+但是它还有另一用处，就是用来计算一个变量与一个常量的乘积：
+#+begin_example
+int mul_by_3(int n)
+{ 
+  400490:       8d 04 7f                lea    (%rdi,%rdi,2),%eax
+  return 3 * n;
+}
+#+end_example
+与普通的乘法指令相比，它少了一次把常量装到寄存器中的步骤。

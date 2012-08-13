@@ -1,0 +1,33 @@
+#+Title: sar
+
+sar可以用来收集操作系统一级的各种性能计数器，它包含一组工具，最常用的是 =sar= 和 =sadf= .
+1. 收集数据
+比如，下面的命令收集10s类cpu使用率, 值得注意的是下面的命令把数据追加到 =cpu.sar= 文件中，多次运行不会覆盖
+，根据情况需要指定不同的文件。数据以二进制方式保存。
+#+begin_example
+sar -o cpu.sar -u 1 10
+#+end_example
+
+2. 解释保存的性能数据文件
+#+begin_example
+sar -f cpu.sar
+#+end_example
+
+3. 可视化
+下面这个简单的脚本可以把sar的数据整理成干净的格式
+#+begin_src py
+import sys
+def sar2db(content):
+    def header_norm(h):
+        return h.replace('%', '')
+    lines = [i[3:] for i in [line.split() for line in content.split('\n')[2:-2]]]
+    header = map(header_norm, lines[0])
+    return '\n'.join('\t'.join(line) for line in [header] + lines[1:])
+
+print sar2db(sys.stdin.read())
+#+end_src
+用法如下:
+#+begin_example
+saf -f cpu.sar|sar2db.py > cpu.db
+tquery.py cpu.db 'select plot("a.png,+", system) from _table'
+#+end_example

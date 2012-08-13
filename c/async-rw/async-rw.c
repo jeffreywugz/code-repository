@@ -22,24 +22,27 @@ int64_t get_usec()
   return time_val.tv_sec*1000000 + time_val.tv_usec;
 }
 
+#define is_env_set(key, _default) (0 == (strcmp("true", getenv(key)?: _default)))
 #define block_size (1<<9)
+#define max_rw_buf_size (4 * block_size)
 #define magic 'c'
-int64_t g_write_limit_size = 0;
-int64_t g_err = 0;
+int64_t g_write_limit_size = 0; // 写线程写到什么位置停止写
+int64_t g_n_read_err = 0;
 volatile int64_t g_stop = 0;
-volatile int64_t g_pos = 0;
-char write_buf[16 * block_size] __attribute__ ((aligned (block_size)));
+volatile int64_t g_fsync_pos = 0;
+int g_writer_fd = 0;
 
-int g_fd = 0;
 int write_file_test(const char* path)
 {
   int err = 0;
   int fd = 0;
   int64_t pos = 0;
+  char* write_buf = NULL;
   int64_t written_len = 0;
   int64_t write_size = 0;
   int open_mode = O_RDWR|O_CREAT|O_TRUNC;
-  if (getenv("use_append_mode"))
+  printf("write_file_test(path=%s)\n", path);
+  if (is_env_set("use_append_mode", "true"))
   {
     open_mode |= O_APPEND;
     fprintf(stderr, "write file use append mode\n");
@@ -48,7 +51,7 @@ int write_file_test(const char* path)
   {
     fprintf(stderr, "write file do not use append mode\n");
   }
-  if (!getenv("write_use_buffered_io"))
+  if (is_env_set("write_use_direct_io", "true"))
   {
     open_mode |= O_DIRECT;
     fprintf(stderr, "write use direct io\n");
@@ -58,8 +61,6 @@ int write_file_test(const char* path)
     fprintf(stderr, "write use buffered io\n");
   }
   
-  memset(write_buf, magic, sizeof(write_buf));
-  printf("write_file_test(path=%s)\n", path);
   if (NULL == path)
   {
     err = -EINVAL;
@@ -69,14 +70,19 @@ int write_file_test(const char* path)
     err = errno;
     perror("open");
   }
+  else if (0 != (err = posix_memalign((void**)&write_buf, block_size, max_rw_buf_size)))
+  {
+    fprintf(stderr, "posix_memalign(size=%ld, align=%ld)=>%d\n", max_rw_buf_size, block_size, err);
+  }
   else
   {
-    g_fd = fd;
-    fprintf(stderr, "open file[%d]\n", g_fd);
+    memset(write_buf, magic, max_rw_buf_size);
+    g_writer_fd = fd;
+    fprintf(stderr, "writer open file[%d], write_buf=%p\n", fd, write_buf);
   }
   while(0 == err && pos < g_write_limit_size)
   {
-    write_size = ((random() % sizeof(write_buf))/block_size + 1) * block_size;
+    write_size = ((random() % max_rw_buf_size)/block_size + 1) * block_size;
     if (0 >= (written_len = pwrite(fd, write_buf, write_size, pos)))
     {
       err = errno;
@@ -89,28 +95,33 @@ int write_file_test(const char* path)
     }
     else
     {
-      pos += write_size;
+      pos += written_len;
       fsync(fd);
-      g_pos = pos;
+      g_fsync_pos = pos;
       /* fdatasync(fd); */
     }
   }
   fprintf(stderr, "write to %ld\n", pos);
   g_stop = 1;
+  if (NULL != write_buf)
+  {
+    free(write_buf);
+  }
   return err;
 }
 
-char read_buf[16 * block_size] __attribute__ ((aligned (block_size)));
 int read_file_test(const char* path)
 {
   int err = 0;
-  static int fd = 0;
-  int local_fd = 0;
+  int fd = 0;
   int64_t pos = 0;
   int64_t read_size = 0;
-  char stdbuf[16 * block_size];
+  char buf_for_correct_check[max_rw_buf_size];
+  char* read_buf = NULL;
   int open_mode = O_RDONLY;
-  if (!getenv("read_use_buffered_io"))
+  bool wait_fsync = is_env_set("wait_fsync", "false");
+  printf("read_file(path=%s)\n", path);
+  if (is_env_set("read_use_direct_io", "true"))
   {
     open_mode |= O_DIRECT;
     fprintf(stderr, "read use direct io\n");
@@ -119,57 +130,67 @@ int read_file_test(const char* path)
   {
     fprintf(stderr, "read use buffered io\n");
   }
-  
-  memset(stdbuf, magic, sizeof(stdbuf));
-  printf("read_file(path=%s)\n", path);
   if (NULL == path)
   {
     err = -EINVAL;
   }
-  else if (0 > (local_fd = open(path, open_mode)))
+  else if (0 > (fd = open(path, open_mode)))
   {
     err = errno;
     perror("open");
   }
-  else if(__sync_bool_compare_and_swap(&fd, 0, local_fd))
+  else if (0 != (err = posix_memalign((void**)&read_buf, block_size, max_rw_buf_size)))
   {
-    fprintf(stderr, "set fd to local_fd[%d]\n", local_fd);
+    fprintf(stderr, "posix_memalign(size=%ld, align=%ld)=>%d\n", max_rw_buf_size, block_size, err);
   }
-  while(g_fd == 0)
-    ;
-  fd = g_fd;
+  else
+  {
+    memset(buf_for_correct_check, magic, max_rw_buf_size);
+    if (is_env_set("share_fd_with_writer", "false"))
+    {
+      while(g_writer_fd == 0)
+        ;
+      fd = g_writer_fd;
+    }
+    fprintf(stderr, "reader open file[%d], read_buf=%p\n", fd, read_buf);
+  }
   while(0 == err && !g_stop)
   {
-    if (false && pos >= g_pos)
+    if (wait_fsync && pos >= g_fsync_pos)
     {
-      fprintf(stderr, "read to end[pos=%ld], need wait\n", g_pos);
+      fprintf(stderr, "read to end[pos=%ld], need wait\n", g_fsync_pos);
     }
-    else if (0 > (read_size = pread(fd, read_buf, sizeof(read_buf), pos)))
+    else if (0 > (read_size = pread(fd, read_buf, max_rw_buf_size, pos)))
     {
       err = errno;
       perror("read");
     }
     else
     {
-      if(0 != memcmp(stdbuf, read_buf, read_size))
+      if(0 != memcmp(buf_for_correct_check, read_buf, read_size))
       {
-        __sync_fetch_and_add(&g_err, 1);
-        fprintf(stderr, "read invalid data at pos=%ld\n", pos);
+        __sync_fetch_and_add(&g_n_read_err, 1);
+        fprintf(stderr, "read invalid data at pos=%ld, size=%ld\n", pos, read_size);
       }
       pos += read_size;
     }
   }
   fprintf(stderr, "read to %ld\n", pos);
+  if (NULL != read_buf)
+  {
+    free(read_buf);
+  }
   return err;
 }
 
 typedef void*(*pthread_handler_t)(void*);
-int test_async_rw(const char* path, int64_t n_block)
+int test_async_rw(const char* path, int64_t n_thread, int64_t n_block)
 {
   int err = 0;
   int64_t ret = 0;
-  pthread_t thread[3];
+  pthread_t thread[n_thread];
   g_write_limit_size = n_block * block_size;
+  fprintf(stderr, "test_async_rw(path=%s, n_thread=%ld, n_block=%ld)\n", path, n_thread, n_block);
   for (int64_t i = 0; i < array_len(thread); i++) {
     if (i == 0)
     {
@@ -188,7 +209,7 @@ int test_async_rw(const char* path, int64_t n_block)
       fprintf(stderr, "thread[%ld] err=%ld\n", i, ret);
     }
   }
-  fprintf(stderr, "total_read_err=%ld\n", g_err);
+  fprintf(stderr, "total_read_err=%ld\n", g_n_read_err);
   return err;
 }
 
@@ -204,7 +225,7 @@ int main(int argc, char *argv[])
   }
   else
   {
-    err = test_async_rw(getenv("path")?: path, atoll(argv[1]));
+    err = test_async_rw(getenv("path")?: path, atoll(getenv("n_thread")?:"2")?:2, atoll(argv[1]));
   }
   if (show_help)
   {

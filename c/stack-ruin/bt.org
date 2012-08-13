@@ -1,0 +1,56 @@
+#+Title: gdb backtrace的真正含义
+
+使用gdb调试coredump时，首先关心的就是stacktrace，但有时你会发现bt命令的输出不符合期望,
+比如下面的程序:
+#+begin_src cpp
+#define __noinline__ __attribute__((noinline))
+int __noinline__ core(){ return *((char*)0) = 0; }
+int __noinline__ foo4() {return core(); }
+int __noinline__ foo3() {return foo4(); }
+int __noinline__ foo2() {return foo3(); }
+int __noinline__ foo1() {return foo2(); }
+int main()
+{
+  return foo1();
+}
+#+end_src
+最后输出的backtrace是:
+#+begin_example
+(gdb) bt
+#0  0x0000000000400492 in core ()
+#1  0x00000030c4e1d994 in __libc_start_main () from /lib64/libc.so.6
+#2  0x00000000004003d9 in _start ()
+#+end_example
+中间的函数全部消失了，是 =__noinline__= 没起作用吗？事实证明不是:
+#+begin_example
+00000000004004c0 <foo2>:
+  4004c0:       31 c0                   xor    %eax,%eax
+  4004c2:       e9 e9 ff ff ff          jmpq   4004b0 <foo3>
+  4004c7:       66 0f 1f 84 00 00 00    nopw   0x0(%rax,%rax,1)
+  4004ce:       00 00 
+
+00000000004004d0 <foo1>:
+  4004d0:       31 c0                   xor    %eax,%eax
+  4004d2:       e9 e9 ff ff ff          jmpq   4004c0 <foo2>
+  4004d7:       66 0f 1f 84 00 00 00    nopw   0x0(%rax,%rax,1)
+  4004de:       00 00 
+#+end_example
+可以看到函数确实没有内联，但函数调用使用的是jmpq指令而不是call指令，也就是说因为这里的几个函数调用都是tail call，
+所以stack frame被重用了。
+
+同时也可以明白backtrace是沿着栈顶一帧一帧向下找的，所以如果栈顶的一帧被破坏了，那么backtrace就无效了。
+比如最后调用了这样的函数:
+#+begin_src cpp
+int stackoverflow(int x){ char buf[0]; memset(buf, 0, 16); return 0; }
+int __noinline__ foo(int x) { return x > 0? stackoverflow(x): foo(x) * 2; }
+#+end_src
+那么gdb bt的输出为:
+#+begin_example
+(gdb) bt
+#0  0x0000000000000000 in ?? ()
+#1  0x0000000000000000 in ?? ()
+#+end_example
+
+这个情况在死锁时最容易出现:
+
+当然一般情况下只是栈顶的少数几帧被破坏了，打印其余的帧还是可能的。

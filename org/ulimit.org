@@ -1,0 +1,48 @@
+#+Title: ulmit
+
+ulimit调整resource limit，resource的项包括堆栈的大小，进程可持有的文件描述符个数等,
+resource limit是进程的属性，并且会由父进程继承给子进程。ulimit调整的是当前shell的属性，
+从而就可以影响当前shell创建的子进程，以及子进程创建的子进程。
+
+因为ulimit调整的是shell自身的属性，所以它不能通过一个外部命令完成，而必须是builtin。
+
+ulimit可调整两种限制: soft limit和hard limit。
+进程的资源限制取soft limit和hard limit中较小的一个。其中soft limit可调小，也可调大，只要不超过hard limit,
+但是hard limit一般只能调小。
+
+比如调整stack size limit:
+#+begin_src sh
+yuanqi.xhf@OceanBase036033 ~$ ulimit -H -s # print current hard limit
+unlimited
+yuanqi.xhf@OceanBase036033 ~$ ulimit -S -s # print current soft limit
+unlimited
+yuanqi.xhf@OceanBase036033 ~$ ulimit -S -s 4096 # set soft limit to 4096KB
+yuanqi.xhf@OceanBase036033 ~$ ulimit -S -s 8192 # set soft limit to 8192KB
+yuanqi.xhf@OceanBase036033 ~$ ulimit -H -s 8192 # set hard limit to 8192KB
+yuanqi.xhf@OceanBase036033 ~$ ulimit -H -s 10240 # set hard limit to 10240KB, will fail
+-bash: ulimit: stack size: cannot modify limit: Operation not permitted
+#+end_src
+
+但是要注意的是，即使hard limit和soft limit都显示为unlimited, 也并不代表真的没有限制，比如, stack size为unlimited，
+但是通过程序可以测出，实际能使用的堆栈只有1M, 只是怎么回事呢?
+
+原来是pthread还有一级限制，可以用如下的方式查看和设置这个限制:
+#+begin_src cpp
+int64_t get_thread_stack_size()
+{ 
+  int64_t stack_size = 0;
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_getstacksize (&attr, &stack_size);
+  return stack_size;
+}
+
+int pthread_create_with_stack_limit(pthread_t* thread, int64_t stack_limit, void* func)
+{ 
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, stack_limit);
+  pthread_create(thread, &attr, func, NULL);
+  return 0;
+}
+#+end_src

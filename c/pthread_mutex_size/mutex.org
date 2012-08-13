@@ -1,0 +1,72 @@
+#+Title: mutex size
+
+=pthread_t= 和 =pthread_key_t= 都是简单的 =uint64_t= 或 =uint32_t= 
+#+begin_src cpp
+typedef unsigned long int pthread_t;
+typedef unsigned int pthread_key_t;
+#+end_src
+
+但是 =pthread_mutex_t= 和 =pthread_cond_t= =pthread_rw_lock_t= 都是复杂的结构体,
+#+begin_src cpp
+typedef union
+{
+  struct __pthread_mutex_s
+  {
+    int __lock;
+    unsigned int __count;
+    int __owner;
+    unsigned int __nusers;
+    int __kind;
+    int __spins;
+    __pthread_list_t __list;
+  } __data;
+  char __size[40];
+  long int __align;
+} pthread_mutex_t;
+
+typedef union
+{
+  struct
+  {
+    int __lock;
+    unsigned int __futex;
+    __extension__ unsigned long long int __total_seq;
+    __extension__ unsigned long long int __wakeup_seq;
+    __extension__ unsigned long long int __woken_seq;
+    void *__mutex;
+    unsigned int __nwaiters;
+    unsigned int __broadcast_seq;
+  } __data;
+  char __size[48];
+  __extension__ long long int __align;
+} pthread_cond_t;
+
+typedef union
+{
+  struct
+  {
+    int __lock;
+    unsigned int __nr_readers;
+    unsigned int __readers_wakeup;
+    unsigned int __writer_wakeup;
+    unsigned int __nr_readers_queued;
+    unsigned int __nr_writers_queued;
+    int __writer;
+    int __shared;
+    unsigned long int __pad1;
+    unsigned long int __pad2;
+    unsigned int __flags;
+  } __data;
+  char __size[56];
+  long int __align;
+} pthread_rwlock_t;
+#+end_src
+
+相比起来，OB中定义的 =spin_rw_lock= 只用两个 =int64_t= 即可:
+#+begin_src cpp
+class SpinRWLock {
+    volatile int64_t ref_cnt_;
+    volatile int64_t wait_write_;
+};
+#+end_src
+看样子不用 =pthread_mutex_t= 和 =pthread_rwlock_t= 又多了一个理由。

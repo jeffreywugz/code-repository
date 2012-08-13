@@ -1,0 +1,67 @@
+#+Title: make closure
+
+在Python等脚本语言中有个很好用的功能: closure.
+closure是一个可调用的函数，但是它不仅引用了代码，同时也把定义函数时的环境保存起来了，所以也被称为闭包。
+比如下面的代码返回的 =adder= 就是一个closure，因为 =adder= 函数体引用的变量x，是调用 =make_adder= 时传递的值。
+#+begin_src python
+def make_adder(x):
+  def adder(y): return x + y
+  return adder
+#+end_src
+
+在C++中可以用模板模仿closure的实现，把函数和函数的参数绑定在一起构成一个可调用的函数。
+用法可能如下:
+#+begin_src cpp
+int add(int x, int y){return x + y; }
+int main()
+{
+  Closure* x  = &make_closure(add, 2, 3);
+  return s = x->call();
+}
+#+end_src
+
+实现比较trick，尽管这里已经做了很多简化:
+#+begin_src cpp
+struct Nil{};
+Nil nil;
+template<typename Ret, typename Func, typename T1, typename T2, typename T3>
+Ret call(Func func, T1 a1, T2 a2, T3 a3){  return func(a1, a2, a3);}
+
+template<typename Func, typename T1, typename T2>
+int call(Func func, T1 a1, T2 a2, Nil a3){  return func(a1, a2); }
+
+template<typename Func, typename T1>
+int call(Func func, T1 a1, Nil a2, Nil a3) {  return func(a1);}
+
+template<typename Func>
+int call(Func func, Nil a1, Nil a2, Nil a3){  return func();}
+
+struct Closure
+{
+  Closure(){}
+  ~Closure(){}
+  virtual int call() = 0;
+};
+template<typename Func, typename T1, typename T2, typename T3>
+struct ClosureImp: public Closure
+{
+  ClosureImp(Func& func, T1& a1, T2& a2, T3& a3): func(func), a1(a1), a2(a2), a3(a3)
+  {}
+  ~ClosureImp() {}
+  int call() { return ::call(func, a1, a2, a3); }
+  Func func;
+  T1 a1;
+  T2 a2;
+  T3 a3;
+};
+
+template<typename Func, typename T1, typename T2, typename T3>
+ClosureImp<Func, T1, T2, T3>& make_closure_(Func func, T1 a1, T2 a2, T3 a3)
+{
+  static ClosureImp<Func, T1, T2, T3> closure(func, a1, a2, a3);
+  return closure;
+}
+
+#define head3(a1, a2, a3,...) a1, a2, a3
+#define make_closure(func, ...) make_closure_(func, head3(__VA_ARGS__, nil, nil, nil))
+#+end_src

@@ -1,0 +1,105 @@
+#+Title: direct io能读到未刷盘的数据吗?
+
+如果用buffered IO读取文件，显然即使数据未刷盘，肯定也能读到，那么如果使用DIRECT IO读文件，
+是否能读到缓存中的数据呢?
+
+因为最近测试时遇到一个问题怀疑是由于direct io方式没读到缓存的数据引起的。所以写了一个程序验证:
+经过测试没有发现异常情况。
+#+begin_src cpp
+int read_after_write(const char* path, int64_t write_limit_size)
+{
+  int err = 0;
+  int wfd = 0;
+  int rfd = 0;
+  int64_t n_err = 0;
+  int64_t pos = 0;
+  char* write_buf = NULL;
+  char* read_buf = NULL;
+  int64_t write_size = max_rw_buf_size;
+  int64_t written_len = 0;
+  int64_t read_len = 0;
+  bool need_fsync = is_env_set("need_fsync", "false");
+  fprintf(stderr, "need_fsync=%s\n", str_bool(need_fsync));
+  if (NULL == path)
+  {
+    err = -EINVAL;
+  }
+  else if (0 > (wfd = open(path, O_WRONLY|O_CREAT|O_TRUNC, S_IRWXU)))
+  {
+    err = errno;
+    perror("open");
+  }
+  else if (0 > (rfd = open(path, O_RDONLY|O_DIRECT, S_IRWXU)))
+  {
+    err = errno;
+    perror("open");
+  }
+  else if (0 != (err = posix_memalign((void**)&write_buf, block_size, max_rw_buf_size)))
+  {
+    fprintf(stderr, "posix_memalign(size=%ld, align=%ld)=>%d\n", max_rw_buf_size, block_size, err);
+  }
+  else if (0 != (err = posix_memalign((void**)&read_buf, block_size, max_rw_buf_size)))
+  {
+    fprintf(stderr, "posix_memalign(size=%ld, align=%ld)=>%d\n", max_rw_buf_size, block_size, err);
+  }
+  else
+  {
+    memset(write_buf, magic, max_rw_buf_size);
+    memset(read_buf, 0, max_rw_buf_size);
+  }
+  for(pos = 0; 0 == err && pos < write_limit_size; pos += (written_len > 0)? written_len: 0)
+  {
+    //fprintf(stderr, "write(pos=%ld)\n", pos);
+    if (0 >= (written_len = pwrite(wfd, write_buf, write_size, pos)))
+    {
+      err = errno;
+      perror("write");
+      fprintf(stderr, "pwrite(fd=%d, write_size=%ld, pos=%ld) error\n", wfd, write_size, pos);
+    }
+    else if (written_len != write_size)
+    {
+      fprintf(stderr, "written_len[%ld] != write_size[%ld]\n", written_len, write_size);
+    }
+    else if (need_fsync && 0 != fsync(wfd))
+    {
+      err = errno;
+      perror("fsync");
+      fprintf(stderr, "fsync(fd=%d, write_size=%ld, pos=%ld) error\n", wfd, write_size, pos);
+    }
+    else if (0 >= (read_len = pread(rfd, read_buf, write_size, pos)))
+    {
+      err = errno;
+      perror("pread");
+      fprintf(stderr, "pread(fd=%d, pos=%ld) error\n", rfd, pos);
+    }
+    else if (read_len != write_size)
+    {
+      n_err++;
+      fprintf(stderr, "read_len[%ld] != write_size[%ld]\n", read_len, write_size);
+    }
+    else if (0 != memcmp(read_buf, write_buf, write_size))
+    {
+      n_err++;
+      fprintf(stderr, "memcmp(read_buf != read_buf)\n");
+    }
+  }
+  if (wfd >= 0)
+  {
+    close(wfd);
+  }
+  if (rfd >= 0)
+  {
+    close(rfd);
+  }
+  if (NULL != write_buf)
+  {
+    free(write_buf);
+  }
+  if (NULL != read_buf)
+  {
+    free(read_buf);
+  }
+  fprintf(stderr, "read nothing after write happened %ld times\n", n_err);
+  return err;
+}
+#+end_src

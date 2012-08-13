@@ -1,0 +1,36 @@
+#+Title: serializable snapshot isolation
+
+snapshot isolation保证事务执行期间本事务看到的是数据库的一个snapshot，
+它避免了ANSI SQL定义的非serializable隔离级别的所有anomalies, 包括脏读和幻读。
+但是它并不等同serializable, 因为有write skew的现象, 简单来说当两个事务读取共同的数据集,
+然后根据这些读到的数据修改不相交的数据集。因为提交时更新没有冲突，所以两个事务都会成功，
+但是结果不一定可串行，比如:
+#+begin_example
+initial state: a = 0, b = 0
+T1: a = b+1
+T2: b = a+1
+#+end_example
+两个事务同时开始，它们看到的都是
+#+begin_example
+a=0, b=0
+#+end_example
+提交之后，结果是:
+#+begin_example
+a=1, b=1
+#+end_example
+如果是串行执行，结果只能是:
+#+begin_example
+a=2, b=0 or a=0, b=2
+#+end_example
+从这可以看出，snapshot isolation不能保证serialization。
+
+有两种方法可以在snapsnot isolation的基础上实现serialization.
+1. Materialize the conflict
+因为snapshot isolation只在一种情况下回滚事务，那就是检查到写冲突，
+但是从上面的例子可以看出有些事务即使没有写冲突也不能并发执行，提交时必须要回滚一些事务，
+为做到这一点，可以把并发执行有问题的事务之间的冲突之间转化为直接的写冲突，这也就是说要让这些有冲突的事务修改同样的单元格，
+人为引入冲突。这种方法需要在数据库中增加冗余数据。
+2. Promotion
+这种方法不用增加冗余数据，而是把事务中的读操作升级为写操作，把单元格的值替换为它自身，当然不一定真的写，比如可以用 'select for update'实现promotion.
+
+

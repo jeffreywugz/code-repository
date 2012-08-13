@@ -1,0 +1,36 @@
+#+Title: bash
+#+options: toc:nil
+
+* 把命令用管道传给bash的陷阱
+通常我们认为可以用如下的方式执行一个shell脚本：
+#+begin_src sh
+cat a.sh|bash
+#+end_src
+对通常的命令，这样做都没有问题，但是这里有个隐蔽的陷阱，那就是 =a.sh= 中的命令操作的标准输入同时也是bash的标准输入。
+考虑如下的脚本:
+#+begin_src sh
+bash $ cat a.sh
+ssh 10.232.36.33 true
+echo done
+#+end_src
+如果直接执行是没有问题的:
+#+begin_src sh
+bash a.sh
+#+end_src
+输出是: =done=
+但是如果用 =cat a.sh|bash= 执行, 就看不到认为输出，因为 =ssh= 把标准输入的内容清空了。
+
+* 后台执行程序的陷阱
+后台执行程序时，我们一般都会记得把标准输出和标准错误重定向到文件，但是不去管标准输入，
+如果程序尝试读标准输入，就会收到 =SIGTTIN= , 这个信号的缺省处理函数会让程序停下来。
+比如执行如下的命令:
+#+begin_src sh
+/bin/sh -c read a &
+#+end_src
+可以看到它处于STOP(T)状态：
+#+begin_example
+yuanqi.xhf@tfs035040 deploy$ ps f `grep -x -f '^/bin/sh -c read a'`
+  PID TTY      STAT   TIME COMMAND
+30221 pts/43   T      0:00 /bin/sh -c read a
+#+end_example
+为了避免这种情况，最好使用nohup启动脚本, 即使是不考虑 =SIGHUP= (比如很快就能执行完毕的脚本)。

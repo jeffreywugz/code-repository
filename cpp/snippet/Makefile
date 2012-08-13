@@ -1,6 +1,6 @@
 target = tsi
 cxx = g++
-cxxflags = -lpthread -g
+cxxflags = -lpthread -g -O3
 
 all: $(target).run
 %.run: %.exe

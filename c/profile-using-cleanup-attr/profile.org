@@ -1,0 +1,52 @@
+#+Title: profile using gcc cleanup attribute
+
+gcc支持对变量和函数声明各种扩展属性，最常见的是说明变量的对齐方式。
+但是还有一种不那么常用的属性 =cleanup= :
+#+begin_src cpp
+__attribute__((cleanup(free))) char* str = malloc(1024);
+#+end_src
+上面声明了 =str= 的 =cleanup= 属性，表示当 =str= 离开自己的作用域时调用 =free(str)= 。
+
+合理地利用 =cleanup= 函数可以在 =C= 语言中实现针对函数调用的简单profiler.
+#+begin_src cpp
+#include <sys/time.h>
+
+int64_t get_usec()
+{
+  struct timeval time_val;
+  gettimeofday(&time_val, NULL);
+  return time_val.tv_sec*1000000 + time_val.tv_usec;
+}
+
+struct prof_entry_t
+{
+  const char* file_;
+  const char* func_;
+  const int64_t line_;
+  int64_t start_us_;
+  int64_t end_us_;
+};
+
+void print_profile_entry(struct prof_entry_t* pe)
+{
+  fprintf(stderr, "%s:%ld:%s using %ldus\n", pe->file_, pe->line_, pe->func_, pe->end_us_ - pe->start_us_);
+}
+
+static void prof_func_end(struct prof_entry_t *pe)
+{
+  pe->end_us_ = get_usec();
+  print_profile_entry(pe);
+}
+
+#define DECL_PROF __attribute__((cleanup(prof_func_end))) struct prof_entry_t prof_entry = {__FILE__, __func__, __LINE__, get_usec(), 0};
+#+end_src
+
+使用方法如下, 只要在函数前面加上 =DECL_PROF= 宏，就会在每次调用函数时打印函数调用消耗的时间.
+#+begin_src cpp
+int test_profile()
+{
+  DECL_PROF;
+  usleep(100000);
+  return 0;
+}
+#+end_src

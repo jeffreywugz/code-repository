@@ -1,0 +1,51 @@
+#+Title: array
+一维数组容易理解，在实际使用时，二维数组可能有两种形式的声明:
+#+begin_src cpp
+int* a11_addr1(int (*a)[16])
+{
+  return &a[1][1];
+}
+
+int* a11_addr2(int *a[16])
+{
+  return &a[1][1];
+}
+#+end_src
+这两种形式的声明类型是不一样的，如果要动态申请内存构造二维数组，初始化方式也不一样。
+
+第一种方式声明了一个指针，指针指向的是 =int[16]= 类型，
+所以这种方式需要的参数可以直接传递一个 =x[3][16]= 方式定义的二维数组，
+动态构造数组时也只需要一次申请一个 =3*16*sizeof(int)= 大小的内存块即可，传递内存块首地址即可。
+#+begin_example
+int* a11_addr1(int (*a)[16])
+{
+  400490:	48 8d 47 44          	lea    0x44(%rdi),%rax
+  return &a[1][1];
+}
+...
+#+end_example
+
+第二种方式声明的是一个数组，数组中的每个元素都是 =int*= 类型的指针。
+所以这种方式什么的参数不能直接传递 =x[16][3]= 形式声明的数组，动态构造数组时也更麻烦一些,
+需要申请一个 =sizeof(int*) * 16 + sizeof(int) * 3 * 16= 大小的内存块，并且需要把前16个指针指向正确的位置。
+#+begin_example
+int* a11_addr2(int *a[16])
+{
+  4004a0:	48 8b 47 08          	mov    0x8(%rdi),%rax
+  4004a4:	48 83 c0 04          	add    $0x4,%rax
+  return &a[1][1];
+}
+...
+#+end_example
+
+第一种方式的缺点是第二维必须是编译器常量, 第二种方式的缺点是多了一次间接寻址。综合起来，我们可以用第三种方式:
+#+begin_example
+int* a11_addr3(int* p, int size)
+{
+  4004b0:	48 63 f6             	movslq %esi,%rsi
+  4004b3:	48 8d 44 b7 04       	lea    0x4(%rdi,%rsi,4),%rax
+  int (*a)[size] = p;
+  return &a[1][1];
+}
+...
+#+end_example

@@ -1,0 +1,23 @@
+#+Title: multie queue
+
+队列是一种常见的数据结构，在服务器端可以比较好的把一个任务分为若干个阶段来完成，
+如果队列中的每一项表示一个完整的待完成的任务(这是最常见的情况)，则并不需要严格地先进先出, 实际上假如有多个消费者使用队列，
+即使队列是先进先出的，也没法严格地保证先取出的任务先完成。这种情况下为了减少多线程的冲突，我们可以在内部使用多个队列。
+每个线程根据自己的ID选择一个队列使用。
+
+下面的测试结果表示4个线程，push/pop 1024000项数据时，push/pop的锁冲突。第一组表示使用4个队列，每个队列容量是1024，
+第二组表示用1个队列，每个队列容量同样是1024. 从实验中可以看出使用4个队列可以将锁冲突减少将近一半。
+#+begin_example
+yuanqi.xhf@tfs035040 par-queue$ ./par-queue.exe 4 1024 4 1024000
+new_mq(n_queue=4, queue_capacity=1024)
+worker[2] push_wait=63011, pop_wait=77706
+worker[3] push_wait=53063, pop_wait=54759
+worker[1] push_wait=59953, pop_wait=64083
+worker[0] push_wait=78036, pop_wait=60587
+yuanqi.xhf@tfs035040 par-queue$ ./par-queue.exe 1 1024 4 1024000
+new_mq(n_queue=1, queue_capacity=1024)
+worker[0] push_wait=119369, pop_wait=120823
+worker[1] push_wait=98459, pop_wait=97814
+worker[3] push_wait=127858, pop_wait=124242
+worker[2] push_wait=98755, pop_wait=102520
+#+end_example

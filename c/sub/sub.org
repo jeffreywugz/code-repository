@@ -1,0 +1,60 @@
+#+Title: sub
+libc提供了丰富的字符串格式化函数，包括sprintf(), vsprintf()等, 但是这些函数都是接受可变参数或 =va_list= 为参数。有个常见的功能是这些函数无法提供的：根据一个模板和字符串数组构成一个新串。
+比如下面的函数:
+#+begin_src cpp
+sub(len, buf, "$a + $b > $c", 3, args)
+#+end_src
+这个函数调用替换的模板是 "$a + $b > $c", 但是我们希望参数是从一个字符串数组中拿到的。
+#+begin_src cpp
+int sub(int64_t len, char* buf, const char* tpl, int64_t n, const char* args[])
+{
+  int err = 0;
+  int64_t idx = 0;
+  char* p = NULL;
+  if (NULL == buf || NULL == tpl || NULL == args || len <= 0)
+  {
+    err = -EINVAL;
+  }
+  for(p = buf; OB_SUCCESS == err && *tpl && p < buf + len;)
+  {
+    if (*tpl == '$'){
+      idx = *++tpl - 'a';
+      if (*tpl != 0)
+        tpl++;
+      if (0 > idx || idx >= n){
+        fprintf(stderr, "invalid idx[%ld], n=%ld\n", idx, n);
+      }
+      else if (NULL == args[idx])
+      {
+        err = -EINVAL;
+        fprintf(stderr, "args[%ld] == NULL\n", idx);
+      }
+      else if (0 != args[idx][n = strnlen(args[idx], buf + len - p - 1)])
+      {
+        err = -ENOMEM;
+        fprintf(stderr, "args[%ld] too long to append, remain=%ld\n", idx, buf + len - p - 1);
+      }
+      else
+      {
+        memcpy(p, args[idx], n);
+        p += n;
+      }
+    } else {
+      *p++ = *tpl++;
+    }
+  }
+  if (*tpl != 0)
+  {
+    err = -EINVAL;
+  }
+  else if (p >= buf + len)
+  {
+    err = -ENOMEM;
+  }
+  else
+  {
+    *p = 0;
+  }
+  return err;
+}
+#+end_src

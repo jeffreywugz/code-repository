@@ -1,11 +1,13 @@
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <pthread.h>
 #include <new>
 
 using namespace std;
 
-template<typename T>
+template<typename T, typename ID>
 struct TSIFactory
 {
   public:
@@ -24,10 +26,12 @@ struct TSIFactory
       else if (NULL != (val = (T*)pthread_getspecific(key_)))
       {}
       else if (NULL == (val = new(std::nothrow)T()))
+      {
+        err = -ENOMEM;
+      }
+      else if (0 != (err = pthread_setspecific(key_, val)))
       {}
-      else if (0 != (err = pthread_setspecific(key_, val))) // don't handle mem leak in case of fail.
-      {}
-      if (0 != create_err_ && NULL != val)
+      if (0 != err && NULL != val)
       {
         destroy(val);
         val = NULL;
@@ -35,12 +39,15 @@ struct TSIFactory
       return val;
     }
     static T* get() {
-      static TSIFactory<T> factory;
+      static TSIFactory<T, ID> factory;
       return factory._get();
     }
   private:
     static void destroy(void* arg) {
-      delete (T*)arg;
+      if (NULL != arg)
+      {
+        delete (T*)arg;
+      }
     }
     int create_err_;
     pthread_key_t key_;
@@ -53,9 +60,10 @@ class A
   ~A() { printf("~A()\n"); }
 };
 
+class xx{};
 void* foo(void* arg)
 {
-  A* a = TSIFactory<A>::get();
+  A* a = TSIFactory<A, xx>::get();
   if (NULL == a)
   {
     printf("a == NULL\n");
