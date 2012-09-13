@@ -1,0 +1,21 @@
+#+Title: Cache Align
+
+在多线程环境下，如果多个线程通过共享变量同步，那么很有可能出现false sharing的问题。
+比如两个变量落在了同一个cache line中，两个线程分别修改其中的一个变量，并且并不关心另一个变量的值，
+但是由于这两个变量都落在同一个cache line中，所以其中一个线程的修改会导致另一个线程带到cache中的对应的cache line无效。
+为了避免false sharing的问题，可以用两种方法:
+1. 如果是少数的几个变量false sharing，那么可以在变量中间插入padding，使得它们落在不同的cache line中。
+   #+begin_src cpp
+   #define CACHE_ALIGN_SIZE 64
+   #define CACHE_ALIGNED __attribute__((aligned(CACHE_ALIGN_SIZE)))
+   
+   volatile uint64_t push_ CACHE_ALIGNED;
+   volatile uint64_t pop_ CACHE_ALIGNED;
+   #+end_src
+2. 如果是一个数组中连续的元素出现false sharing，那么插入padding的方法太浪费内存，不可取；
+   这时可以让对数组中连续元素的访问变成不连续的。比如原始的访问顺序是: 1, 2, 3, 4, 5, 6, 7, 8。
+   可以这个序列打散，变成: 1, 3, 5, 7, 2, 4, 6, 8。
+   更准确的描述是，假设数组长度为: =1<<len_bits=, 我们希望相连两项元素间隔是 =1<<tride_bits=, 那么第n项元素打散后的位置是:
+   #+begin_src cpp
+   stride_pos(n) = ((n&len_mask)>>tride_bits) | (n<<(len_bits - tride_bits)) & len_mask
+   #+end_src

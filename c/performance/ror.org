@@ -1,0 +1,20 @@
+#+Title: Circular Shift using Inline Asm
+
+C语言没有提供循环移位的功能，但是可以用如下的方法实现循环移位:
+#+begin_src cpp
+static inline uint64_t rol(const uint64_t x, const int64_t shift) {
+  return (x >> shift) | (x << (64-shift));
+}
+#+end_src
+当然上面的代码不是最优的，因为X86提供了循环移位的指令，使用inline asm可以一条指令实现循环移位:
+#+begin_src cpp
+static inline uint64_t rol(const uint64_t x, const int64_t shift) {
+  uint64_t ret = x;
+  __asm__ ("roll %b1,%q0"
+           :"+g" (ret)
+           :"Jc" (shift));
+  return ret;
+}
+#+end_src
+上面的代码中: '%b1, %q0'中的'b'表示byte，'q'表示quad word。
+'Jc'表示0~63之间的常量或'ecx', 'g'表示任意的寄存器，内存地址。'+'表示ret作为输出的同时也作为输入。

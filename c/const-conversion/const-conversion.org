@@ -1,0 +1,30 @@
+#+Title: const conversion
+
+非const类型可以直接转成对应的const类型使用，比如:
+#+begin_src cpp
+char p0 = 0;
+const char const_p0 = p0;
+char* p1 = NULL;
+const char* const_p1 = p1;
+#+end_src
+const类型要作为非const类型使用，需要使用const\_cast, 比如:
+#+begin_src cpp
+const char const_p5 = 0;
+char p5 = const_p5; // 因为是简单类型，所以是拷贝赋值, 不用转换
+const char* const_p6 = 0;
+char* p6 = const_cast<char*>(const_p6);
+#+end_src
+看起来规则很简单，没有什么问题，但是考虑如下的转换:
+#+begin_src cpp
+char* p2 = NULL;
+const char*& const_p2 = p2; // error
+char** p3 = NULL;
+const char** const_p3 = p3; // error
+#+end_src
+上面的转换看起来是非const类型转为const类型，但是编译却会报错，因为类型不能直接转换。
+原因很简单，p3与const\_p3并非是简单的const和非const关系，它们的类型完全不一样:
+#+begin_example
+char**和const char**都是指针，其中一个指向char*, 另一个指向const char*。
+const并非最外层的修饰符，所以类型完全不一样。
+#+end_example
+按照上面的解释，char*与const char*也是不能直接转化的，看来是编译器做了特殊处理。

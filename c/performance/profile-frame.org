@@ -1,0 +1,59 @@
+#+Title: Multi-Thread Profile Frame
+
+为了测试某个数据结构的性能，通常需要写一堆性能测试代码，这些代码通常包括:
+1. 计时
+2. 给线程传递参数
+3. 创建和等待线程
+所以这里写了三块代码分别方便处理这三个功能：
+1. 计时: 很容易实现，但是只有用宏来包装才比较好用。
+   #+begin_src cpp
+   #define profile(expr, n) { \
+     int64_t start = get_usec(); \
+     expr;\
+     int64_t end = get_usec();\
+     printf("%s: 1000000*%ld/%ld=%ld\n", #expr, n, end - start, 1000000 * n / (end - start)); \
+   }
+   #+end_src
+2. 给线程传递参数: 把所有线程的要用到的状态用一个类的实例表示，这个实例对外暴露一个接口，就是线程运行时要调用的接口。
+   #+begin_src cpp
+   struct Callable
+   {
+     Callable() {}
+     virtual ~Callable() {}
+     virtual int call(pthread_t thread, int64_t idx) = 0;
+   };
+   #+end_src
+   这个接口同时也是给线程池使用的。
+3. 创建和等待线程: 指定线程数，传递一个Callable的实例，然后就可以创建和等待线程。
+   #+begin_src cpp
+   BaseWorker worker;
+   worker.set_thread_num(n_thread).par_do(callable);
+   #+end_src
+   
+   综合起来，要使用这个profile框架，需要如下的代码:
+   #+begin_src cpp
+   // 定义一个callable
+   struct SimpleCallable: public Callable
+   {
+     int64_t n_items_;
+     SimpleCallable& set(int64_t n_items) {
+       n_items_ = n_items;
+       return *this;
+     }
+     int call(pthread_t thread, int64_t idx) {
+       int err = 0;
+       fprintf(stdout, "worker[%ld] run\n", idx);
+       if (idx % 2)
+         err = -EPERM;
+       return err;
+     }
+   };
+   
+   int profile(int64_t n_thread, int64_t n_items)
+   {
+     BaseWorker worker;
+     SimpleCallable callable;
+     profile(worker.set_thread_num(n_thread).par_do(&callable.set(n_items)), n_items);
+   }
+   #+end_src
+   

@@ -1,0 +1,52 @@
+#+Title: shell glob的实现
+
+shell的glob包含两个特殊字符: '*', '?'。
+'*'用来匹配任意字符串，'?'用来匹配任意字符。
+
+相比起来，'*'用的更常见，比较幸运的是，如果不考虑'?', 只考虑'*', 那么shell的glob功能很容易实现。
+我们考虑如何匹配模式串中的一段，假定一个模式串中有一段子串，这个子串的前后都是'*'，那么为匹配这个子串，
+只需要从待匹配串的当前位置找到该子串第一次出现的位置即可。假如能找到这个位置，那么模式串和待匹配字符串都
+向后移，继续匹配模式串的剩余部分。为什么只要找到子串第一次出现的位置即可？因为该子串紧跟着'*'，而'*'可以匹配任意
+的串，如果子串后移时能匹配成功，那么子串保留在较前的位置也能匹配成功。
+
+如下图所示，如果'AB'移到第二次出现的位置时，能匹配成功，那么'AB'放到第一次出现的位置也能成功，
+两者之间的区别是'AB'前后的'*'匹配的是什么内容。
+#+begin_example
+模式串: ...*AB*cd...
+待匹配串:.efxxxAByyyABzzzcd...
+            ^    ^
+            |    |
+            |    如果匹配这个位置，前一个'*'将匹配'efxxxAByyy', 后一个'*'将匹配'zzz'
+           如果匹配这个位置，那么前一个'*'将匹配'efxxx', 后一个'*'将匹配'yyyABzzz'
+'*AB*'匹配的是'efxxxAByyyyABzzz', 模式串中间的'AB'匹配在那个位置都可以。
+#+end_example
+
+当然，要写出完整的程序，需要处理头尾的特殊情况：
+#+begin_src cpp
+bool glob(char* _pat, char* str)
+{
+  char* pat = strdupa(_pat);
+  char* end_pat = pat;
+  char* start_str = NULL;
+  char end_pat_char = 0;
+  bool star_prefix = false;
+  printf("glob('%s', '%s')\n", pat, str);
+  while(*pat)
+  {
+    end_pat = strchrnul(pat, '*');
+    end_pat_char = *end_pat;
+    *end_pat = 0;
+    start_str = strstr(str, pat);
+    *end_pat = end_pat_char;
+    if (!start_str || (!star_prefix && start_str != str))break;
+    str = start_str + (end_pat - pat);
+    if (end_pat_char){
+      star_prefix = true;
+      end_pat++;
+      if (!*end_pat)str += strlen(str);
+    }
+    pat = end_pat;
+  }
+  return !*pat && !*str;
+}
+#+end_src

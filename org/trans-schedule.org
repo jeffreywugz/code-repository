@@ -14,6 +14,8 @@
 
 当然并非任意的两个时间都有先后顺序，所以要完整的描述schedule，必须用有向无环图。
 但是讨论大部分问题使用上面的描述方法就足够了。
+可以从两个方向对schedule分类:
+* serializability
 特别要区分以下几种schedule:
 1. serial: 事务实际是串行执行的。
 2. view-serializable: 事务实际上可能是并发执行的，但从效果上看起来是可串行的。
@@ -29,3 +31,31 @@
 比如一连串无条件的写操作，W1(x)W2(x)W3(x), 写本身不依赖于任何操作，如果没有其他事务要读x, 那么只要最后执行的操作是W3(x),
 那么从效果上无法区分W1(x)W2(x)和W2(x)W1(x), 所以如果遇到这样的操作序列，view-serializable与conflict-serializable相比
 便有更大的调度自由。
+
+* recoverability 
+从unrecoverable到serial
+1. unrecoverable: 如果随意进行schedule，有可能将数据库置于一个错误的状态，这种schedule是unrecoverable的，也是不可接受的。
+   比如： W1(X)R2(X)Com2Abort1, 这个schedule涉及到两个事务，第二个事务读到了第一个事务写入的值，并且提交了，但是在这之后
+   第一个事务却回滚了，这时数据库状态便是不一致的。
+2. recoverable: 如果一个事务T1依赖于另一个事务T2, 那么只要T2回滚了，T1一定要回滚，满足这个条件的schedule就是recoverable。
+3. cascadeless：也叫avoids casading aborts, 如果一个schedule可以避免一个事务的回滚导致相关的事务也回滚，但是依然recoverable，那么这个schedule就是cascadeless。
+4. strict: 这种schedule要保证:如果一个事务T1有写操作与事务T2的一个操作冲突，并且T1的写操作先发生，那么T1就先提交。
+按照定义，strict的schedule是casadeless的， casadeless的schedule是recoverable的, 最后serial的schedule一定是strict的。
+
+综合起来, 从serializability and recoverability两个维度看schedule的包含关系是:
+1. Serial < commitment-ordered < conflict-serializable < view-serializable <  all schedules
+2. Serial < strict < avoids cascading aborts < recoverable < all schedules
+
+一般说来，数据库系统感兴趣的schedule要满足conflict-serializable和recoverable(一般是strict)的性质。
+
+* commit ordering和strict之间的区别:
+CO要求如果T1在T2之前提交，那么T1的所有与T2冲突的操作都在T2对应的操作之前完成。
+strict要求如果T1有一个写操作与T2冲突，那么只有在T1提交之后，T2对应的操作才能开始。
+显然CO并不一定是strict的，因为他只要求T1与T2冲突的操作至今的顺序与提交顺序一致，T1完全可以在两个事务都执行完毕后在提交，
+这与strict的要求是相违背的。
+
+另一方面, 如果schedule满足strict性质，那么它一定是commit ordering的吗？直观上看来这似乎是正确的。
+但事实并非如此，容易举出反例， 因为strict性质并不关心哪些T1的读在T2的写之前的事务之间的关系，这时T2可以在T1之前提交，
+但这就不满足CO了。实际上不仅是CO，strict性质也保证不了conflict serializable。
+比如：T1先读c，T2再写c, T2再读d，T2提交，T1再写d，T2提交，这个schedule满足strict性质，但不满足conflict serializable。
+

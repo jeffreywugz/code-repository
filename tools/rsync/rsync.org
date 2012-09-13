@@ -1,0 +1,29 @@
+#+Title: rsync2
+rsync可以用来同步文件，但是源地址和目标地址必须要有一个是本地地址
+如果要在一台控制机上在两台远程机器间同步目录，就需要两步操作：
+第一步，把远程源文件拷贝到本地；第二步，把本地文件拷贝到远程目表目录。
+如果有两个互相隔离的子网，只有控制机可以在同时连接两个子网，那么要在两个子网之间的机器间同步文件，
+上面的这个操作就很常见。
+
+可以用如下的脚步完成这个任务:
+#+begin_example
+#!/bin/bash
+help()
+{
+    echo "$0 src-host:src-dir dest-host:dest-dir"
+}
+src=$1 dest=$2
+[ -z "$src" -o -z "$dest" ] && help && exit 1
+set -x
+rsync -aR $src . && rsync -aR ${src#*:} $dest
+#+end_example
+
+另外，rsync要用到ssh，如果ssh到多台机器，它们要用不同的私钥认证，可以指定ssh用那个私钥:
+#+begin_example
+rsync -e 'ssh -i ~/id_rsa' ...
+#+end_example
+可以在~/.ssh/config中配置不同的机器使用不同的私钥:
+#+begin_example
+Host 10.232.35.40
+IdentityFile ~/.ssh/id_rsa.35.40
+#+end_example

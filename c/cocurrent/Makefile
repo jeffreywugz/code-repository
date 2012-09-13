@@ -1,4 +1,4 @@
-target = cpu-out-of-order
+target = atomic_add
 cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99

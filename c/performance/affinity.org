@@ -1,0 +1,53 @@
+#+Title: affinity
+
+通过cat /proc/cpuinfo可以知道系统中有多少个核，一般情况下我们并不需要知道这些核的物理关系是怎样的，
+一般并不关心哪些核属于同一个物理CPU，但是如果要做性能测试，可能就有必要了解这些信息。
+
+比如，如果希望两个线程在同一个物理CPU的不同核上执行，那么我们要这么办？
+首先，可以用下面的代码指定一个线程只能在某个编号的CPU Core上执行:
+#+begin_src cpp
+int set_affinity(pthread_t thread, int k)
+{
+  int err = 0;
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(k, &cpuset);
+  err = pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+  return err;
+}
+#+end_src
+
+那么，接下来就是要选择两CPU编号，保证它们在同一个物理CPU上。观察/proc/cpuinfo文件的内容就可以知道哪些核属于同一个CPU.
+#+begin_example
+yuanqi.xhf@OceanBase036033 performance$ grep 'physical id' /proc/cpuinfo
+physical id     : 1
+physical id     : 1
+physical id     : 1
+physical id     : 1
+physical id     : 0
+physical id     : 0
+physical id     : 0
+physical id     : 0
+....
+#+end_example
+所有physical id相同的核都属于同一个物理CPU。
+同时我们可以发现，在一个物理CPU中,每个core id都出现了两次，它们属于同一个core的超线程。
+#+begin_example
+yuanqi.xhf@OceanBase036033 performance$ grep 'core id' /proc/cpuinfo
+core id         : 0
+core id         : 1
+core id         : 2
+core id         : 3
+core id         : 0
+core id         : 1
+core id         : 2
+core id         : 3
+core id         : 0
+core id         : 1
+core id         : 2
+core id         : 3
+core id         : 0
+core id         : 1
+core id         : 2
+core id         : 3
+#+end_example

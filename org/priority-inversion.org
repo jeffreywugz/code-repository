@@ -1,0 +1,27 @@
+#+Title: Priority Inversion
+#+Options: toc:nil
+Priority Inversion是指高优先级的任务被低优先级的任务抢占，或者低优先级任务阻止高优先级任务继续执行的现象(非调度器的原因)。
+
+* 例子
+造成Priority Inversion的最常见的原因是锁，如果低优先级的任务占有了一把锁，高优先级任务执行也需要这把锁，那么在低优先级任务
+释放锁之前，高优先级任务就不能继续。更有可能的情况是此时系统中还有别的优先级较高的任务存在(在低优先级和高优先级之间), 
+这个任务又会抢占低优先级任务的执行时间，导致低优先级任务会推迟释放锁。如果系统不是很繁忙，这种Priority Inversion的现象根本
+不会被注意到。但是如果系统很忙，那么低优先级任务一直得不到执行机会，从而高优先级任务也被阻塞住了，甚至会造成严重的后果。
+因为高优先级任务通常都是因为重要所以优先级才更高, 比如是与用户交互的任务，或者是实时系统中要到时限的任务。可以设想一个系统设置了
+一个定时任务，不停发送心跳，如果心跳任务不能及时执行，外界可能会认为系统出了故障，也许会重启系统，
+这就是Priotity Inversion造成的比较严重的后果了。
+
+
+* 解决方法
+基本上不可能防止低优先级的任务先拿到锁，所以解决Priority Inversion方法都是保证一旦低优先级的任务拿到了锁，
+就让它尽快执行完毕，期间不要被优先级稍高的任务抢占执行时间(比低优先级高，但比要抢占锁的高优先级任务低)。
+换句话，解决方法都是适当调高critical section的优先级。
+1. Disabling all interrupts to protect critical sections
+进入critical section时，禁用所有的中断，这样在critical section执行期间便不可能被任何任务打断，所以这种方法实际上
+把critical section的优先级跳到了最高。这种方法由于实现简单，所以在嵌入式系统中用的还是很普遍的。
+2. A priority ceiling
+给每个mutex设置一个priority ceiling，priotiry ceiling也就是可能进入critical section的所有任务的最高优先级，
+把critical section的优先级跳到priority ceiling。
+3. Priority inheritance
+priotiry ceiling是多少，实际上不好设置，当然可以把它设置为最高，但这可以优化。Priotity Inheritance是在一个高优先级任务
+尝试进入critical section时，就把critical section的优先级动态调整为自己的优先级。
