@@ -1,41 +1,76 @@
 #include "profile.h"
 #include <string.h>
-#include <semaphore.h>
-#include <time.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <linux/futex.h>
+#include <sys/time.h>
 #include <assert.h>
 
 #define CACHE_ALIGN_SIZE 64
 #define CACHE_ALIGNED __attribute__((aligned(CACHE_ALIGN_SIZE)))
 #define CAS(addr, oldv, newv) __sync_bool_compare_and_swap(addr, oldv, newv)
+#define futex(...) syscall(SYS_futex,__VA_ARGS__)
+
+int decrement_if_positive(int* p)
+{
+  int x = 0;
+  while((x = *p) > 0 && !__sync_bool_compare_and_swap(p, x, x - 1))
+    ;
+  return x;
+}
+
+struct my_sem_t
+{
+  int32_t val_;
+  int32_t nwaiters_;
+};
+
+static int futex_post(volatile int* addr)
+{
+  int err = 0;
+  int val = 0;
+  __sync_fetch_and_add(addr, 1);
+  if (val < 0)
+    futex(addr, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+  return err;
+}
+
+static int futex_wait(my_sem_t* p, const timespec* timeout)
+{
+  int err = 0;
+  if (decrement_if_positive(p->val_) > 0)
+    return err;
+  __sync_fetch_and_add(p->nwaiters_, 1);
+  while(decrement_if_positive(p->val_) <= 0
+        && 0 != (err = futex(p->val_, FUTEX_WAIT_PRIVATE, *p->val_, timeout, NULL, 0)
+                 && ETIMEDOUT != err)
+        ;
+  __sync_fetch_and_add(p->nwaiters_, 1);
+  return err;
+}
+
 class Queue
 {
   public:
     struct Item
     {
       volatile uint32_t seq_;
-      volatile sem_t sem_;
+      volatile int32_t sem_;
       void* data_;
+      char buf[0] CACHE_ALIGNED;
     };
   public:
     Queue(): push_(0), pop_(0), pos_mask_(0), items_(NULL) {}
     ~Queue(){}
-    int init(uint64_t len_bits, Item* items) {
+    int init(uint64_t pos_mask, Item* items) {
       int err = 0;
-      pos_mask_ = (1<<len_bits) - 1;
-      memset(items, 0, sizeof(Item) * (1<<len_bits));
-      for(int64_t i = 0; 0 == err && i < (1<<len_bits); i++) {
-        err = sem_init((sem_t*)&items[i].sem_, 0, 0);
-      }
-      if (0 == err) {
-        items_ = items;
-      }
+      pos_mask_ = pos_mask;
+      memset(items, 0, sizeof(Item) * (pos_mask + 1));
+      items_ = items;
       return err;
     }
     int destroy() {
       int err = 0;
-      for(int64_t i = 0; NULL != items_ && 0 == err && i < (pos_mask_ + 1); i++) {
-        err = sem_destroy((sem_t*)&items_[i].sem_);
-      }
       items_ = NULL;
       return err;
     }
@@ -43,7 +78,7 @@ class Queue
       int err = 0;
       uint64_t seq = __sync_fetch_and_add(&push_, 1);
       Item* pi = items_ + (seq & pos_mask_);
-      if (0 != (err = sem_post((sem_t*)&pi->sem_)))
+      if (0 != (err = futex_post(&pi->sem_)))
       {
         err = errno;
       }
@@ -52,15 +87,15 @@ class Queue
         while(!CAS(&pi->seq_, 0, 1))
           ;
         pi->data_ = data;
-        pi->seq_++;
+        pi->seq_ = 2;
       }
       return err;
     }
-    int pop(void*& data, const struct timespec* end_time) {
+    int pop(void*& data, const struct timespec* timeout) {
       int err = 0;
       uint64_t seq = __sync_fetch_and_add(&pop_, 1);
       Item* pi = items_ + (seq & pos_mask_);
-      if (0 != (err = sem_timedwait((sem_t*)&pi->sem_, end_time)))
+      if (0 != (err = futex_wait(&pi->sem_, timeout)))
       {
         err = errno; // 可能返回ETIMEDOUT
       }
@@ -95,7 +130,7 @@ struct QueueCallable: public Callable
     n_items_ = n_items;
     n_push_thread_ = n_push_thread;
     n_pop_thread_ = n_pop_thread;
-    queue_.init(queue_len_shift, (Queue::Item*)(malloc(sizeof(Queue::Item) * (1<<queue_len_shift))));
+    queue_.init((1<<queue_len_shift)-1, (Queue::Item*)(malloc(sizeof(Queue::Item) * (1<<queue_len_shift))));
     return *this;
   }
   int call(pthread_t thread, int64_t idx) {
@@ -103,6 +138,8 @@ struct QueueCallable: public Callable
     void* p = NULL;
     fprintf(stdout, "worker[%ld] run\n", idx);
     timespec end_time;
+    end_time.tv_sec = 0;
+    end_time.tv_nsec = 10 * 1000 * 1000;
     if (idx < n_push_thread_)
     {
       for(int64_t i = 0; i < n_items_; i++) {
@@ -113,8 +150,7 @@ struct QueueCallable: public Callable
     else
     {
       for(; n_push_done_ != n_push_thread_; ) {
-        clock_gettime(CLOCK_REALTIME, &end_time);
-        end_time.tv_sec++;
+        //clock_gettime(CLOCK_REALTIME, &end_time);
         queue_.pop(p, &end_time);
       }
     }
