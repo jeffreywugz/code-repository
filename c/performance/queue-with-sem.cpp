@@ -1,4 +1,6 @@
 #include "profile.h"
+#include <stdint.h>
+#include <limits.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -19,33 +21,95 @@ int decrement_if_positive(int* p)
   return x;
 }
 
+#define NS_PER_SEC 1000000000
+timespec* calc_remain_timespec(timespec* remain, const timespec* end_time)
+{
+  timespec now;
+  if (NULL == end_time || NULL == remain)
+  {}
+  else if (0 != clock_gettime(CLOCK_REALTIME, &now))
+  {}
+  else
+  {
+    remain->tv_sec = end_time->tv_sec - now.tv_sec;
+    remain->tv_nsec = end_time->tv_nsec - now.tv_nsec;
+    if (remain->tv_nsec < 0)
+    {
+      remain->tv_sec--;
+      remain->tv_nsec + NS_PER_SEC;
+    }
+  }
+  return remain;
+}
+
+timespec* calc_abs_time(timespec* ts, const int64_t time_ns)
+{
+  if (NULL == ts)
+  {}
+  else if (0 != (clock_gettime(CLOCK_REALTIME, ts)))
+  {}
+  else
+  {
+    ts->tv_nsec += time_ns;
+    if (ts->tv_nsec > NS_PER_SEC)
+    {
+      ts->tv_sec += ts->tv_sec/NS_PER_SEC;
+      ts->tv_nsec %= NS_PER_SEC;
+    }
+  }
+  return ts;
+}
+
 struct my_sem_t
 {
   int32_t val_;
   int32_t nwaiters_;
 };
 
-static int futex_post(volatile int* addr)
+static int futex_post(my_sem_t* p)
 {
   int err = 0;
-  int val = 0;
-  __sync_fetch_and_add(addr, 1);
-  if (val < 0)
-    futex(addr, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+  if (__sync_fetch_and_add(&p->val_, 1) >= INT_MAX)
+  {
+    err = EOVERFLOW;
+  }
+  else if (p->nwaiters_ > 0)
+  {
+    err = futex(&p->val_, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+  }
   return err;
 }
 
-static int futex_wait(my_sem_t* p, const timespec* timeout)
+static int futex_wait(my_sem_t* p, const timespec* end_time)
 {
   int err = 0;
-  if (decrement_if_positive(p->val_) > 0)
-    return err;
-  __sync_fetch_and_add(p->nwaiters_, 1);
-  while(decrement_if_positive(p->val_) <= 0
-        && 0 != (err = futex(p->val_, FUTEX_WAIT_PRIVATE, *p->val_, timeout, NULL, 0)
-                 && ETIMEDOUT != err)
-        ;
-  __sync_fetch_and_add(p->nwaiters_, 1);
+  timespec remain;
+  if (decrement_if_positive(&p->val_) > 0)
+  {}
+  else
+  {
+    __sync_fetch_and_add(&p->nwaiters_, 1);
+    while(1)
+    {
+      calc_remain_timespec(&remain, end_time);
+      if (remain.tv_sec < 0)
+      {
+        err = ETIMEDOUT;
+        break;
+      }
+      if (0 != (err = futex(p->val_, FUTEX_WAIT_PRIVATE, 0, &remain, NULL, 0))
+          && EWOULDBLOCK != err)
+      {
+        break;
+      }
+      if (decrement_if_positive(&p->val_) > 0)
+      {
+        err = 0;
+        break;
+      }
+    }
+    __sync_fetch_and_add(&p->nwaiters_, -1);
+  }
   return err;
 }
 
@@ -54,10 +118,9 @@ class Queue
   public:
     struct Item
     {
-      volatile uint32_t seq_;
-      volatile int32_t sem_;
+      my_sem_t sem_;
       void* data_;
-      char buf[0] CACHE_ALIGNED;
+      //char buf[0] CACHE_ALIGNED;
     };
   public:
     Queue(): push_(0), pop_(0), pos_mask_(0), items_(NULL) {}
@@ -84,27 +147,23 @@ class Queue
       }
       else
       {
-        while(!CAS(&pi->seq_, 0, 1))
+        while(!CAS(&pi->data_, NULL, data))
           ;
-        pi->data_ = data;
-        pi->seq_ = 2;
       }
       return err;
     }
-    int pop(void*& data, const struct timespec* timeout) {
+    int pop(void*& data, const struct timespec* abs_time) {
       int err = 0;
       uint64_t seq = __sync_fetch_and_add(&pop_, 1);
       Item* pi = items_ + (seq & pos_mask_);
-      if (0 != (err = futex_wait(&pi->sem_, timeout)))
+      if (0 != (err = futex_wait(&pi->sem_, abs_time)))
       {
         err = errno; // 可能返回ETIMEDOUT
       }
       else
       {
-        while(!CAS(&pi->seq_, 2, 3))
+        while(NULL == (data = *((void* volatile*)&pi->data_)) || !CAS(&pi->data_, data, NULL))
           ;
-        data = pi->data_;
-        pi->seq_ = 0;
       }
       return err;
     }
@@ -135,22 +194,20 @@ struct QueueCallable: public Callable
   }
   int call(pthread_t thread, int64_t idx) {
     int err = 0;
-    void* p = NULL;
     fprintf(stdout, "worker[%ld] run\n", idx);
     timespec end_time;
-    end_time.tv_sec = 0;
-    end_time.tv_nsec = 10 * 1000 * 1000;
     if (idx < n_push_thread_)
     {
       for(int64_t i = 0; i < n_items_; i++) {
-        queue_.push(p);
+        queue_.push((void*)(i+1));
       }
       __sync_fetch_and_add(&n_push_done_, 1);
     }
     else
     {
-      for(; n_push_done_ != n_push_thread_; ) {
-        //clock_gettime(CLOCK_REALTIME, &end_time);
+      void* p = NULL;
+      for(; n_push_done_ < n_push_thread_; ) {
+        calc_abs_time(&end_time, 10000000);
         queue_.pop(p, &end_time);
       }
     }
