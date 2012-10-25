@@ -130,7 +130,17 @@ class Queue
       void* volatile data_;
       int push(void* data, const timespec* end_time) {
         int err = -EAGAIN;
-        //int32_t total = __sync_add_and_fetch(&total_, 1);
+        int32_t total = __sync_add_and_fetch(&total_, 1);
+        if (inc_if_le0(&total_) <= 0)
+        {}
+        else
+        {
+          __sync_add_and_fetch(&n_waiter_, 1);
+          while(true)
+          {
+          }
+          __sync_add_and_fetch(&n_waiter_, -1);
+        }
         while(true)
         {
           if (CAS(&data_, NULL, data))
@@ -149,7 +159,7 @@ class Queue
         }
         if (-EAGAIN == err)
         {
-          __sync_and_and_fetch(&overflow_, 1);
+          __sync_add_and_fetch(&overflow_, 1);
         }
         return err;
       }
@@ -174,7 +184,7 @@ class Queue
         }
         if (-EAGAIN == err)
         {
-          __sync_and_and_fetch(&overflow_, -1);
+          __sync_add_and_fetch(&overflow_, -1);
         }
         return err;
       }
