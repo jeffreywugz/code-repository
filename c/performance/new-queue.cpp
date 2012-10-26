@@ -58,21 +58,20 @@ timespec* calc_abs_time(timespec* ts, const int64_t time_ns)
   return ts;
 }
 
-static int futex_wake(int* p, int val)
+static int futex_wake(volatile int* p, int val)
 {
   int err = 0;
-  if (0 != futex(p, FUTEX_WAKE_PRIVATE, val, NULL, NULL, 0))
+  if (0 != futex((int*)p, FUTEX_WAKE_PRIVATE, val, NULL, NULL, 0))
   {
     err = errno;
   }
   return err;
 }
 
-static int futex_wait(int* p, int val, const timespec* end_time)
+static int futex_wait(volatile int* p, int val, const timespec* timeout)
 {
   int err = 0;
-  timespec remain;
-  if (0 != futex(p, FUTEX_WAIT_PRIVATE, val, calc_remain_timespec(&remain, end_time), NULL, 0))
+  if (0 != futex((int*)p, FUTEX_WAIT_PRIVATE, val, timeout, NULL, 0))
   {
     err = errno;
   }
@@ -97,11 +96,11 @@ int inc_if_le0(volatile int* p)
 
 struct FCounter
 {
-  int32_t val_;
-  int32_t n_waiters_;
+  volatile int32_t val_;
+  volatile int32_t n_waiters_;
   FCounter(): val_(0), n_waiters_(0) {}
   ~FCounter() {}
-  int32_t inc(const timespec* end_time)
+  int32_t inc(const timespec* timeout)
   {
     int err = 0;
     int32_t val = 0;
@@ -112,7 +111,7 @@ struct FCounter
       __sync_add_and_fetch(&n_waiters_, 1);
       while(true)
       {
-        if (ETIMEDOUT == (err = futex_wait(&val_, val, end_time)))
+        if (ETIMEDOUT == (err = futex_wait(&val_, val, timeout)))
         {
           val = __sync_fetch_and_add(&val_, 1);
           break;
@@ -131,7 +130,7 @@ struct FCounter
     return val;
   }
 
-  int32_t dec(const timespec* end_time)
+  int32_t dec(const timespec* timeout)
   {
     int err = 0;
     int32_t val = 0;
@@ -142,7 +141,7 @@ struct FCounter
       __sync_add_and_fetch(&n_waiters_, 1);
       while(true)
       {
-        if (ETIMEDOUT == (err = futex_wait(&val_, val, end_time)))
+        if (ETIMEDOUT == (err = futex_wait(&val_, val, timeout)))
         {
           val = __sync_fetch_and_add(&val_, -1);
           break;
@@ -211,18 +210,18 @@ class Queue
       items_ = NULL;
       return err;
     }
-    int push(void* data, const timespec* end_time) {
+    int push(void* data, const timespec* timeout) {
       int err = 0;
       uint64_t seq = __sync_fetch_and_add(&push_, 1);
       Item* pi = items_ + (seq & pos_mask_);
-      err = pi->push(data, end_time);
+      err = pi->push(data, timeout);
       return err;
     }
-    int pop(void*& data, const struct timespec* end_time) {
+    int pop(void*& data, const struct timespec* timeout) {
       int err = 0;
       uint64_t seq = __sync_fetch_and_add(&pop_, 1);
       Item* pi = items_ + (seq & pos_mask_);
-      err = pi->pop(data, end_time);
+      err = pi->pop(data, timeout);
       return err;
     }
     int64_t remain() const { return push_ - pop_; }
@@ -238,7 +237,7 @@ struct QueueCallable: public Callable
   Queue queue_;
   int64_t n_items_;
   int64_t n_item_pushed_;
-  int64_t n_push_done_;
+  volatile int64_t n_push_done_;
   int64_t n_push_thread_;
   int64_t n_pop_thread_;
   QueueCallable(): n_items_(0), n_item_pushed_(0), n_push_done_(0), n_push_thread_(0), n_pop_thread_(0) {}
@@ -253,25 +252,25 @@ struct QueueCallable: public Callable
   }
   int call(pthread_t thread, int64_t idx) {
     int err = 0;
-    int64_t timeout_ns = 10 * 1000000;
+    int64_t timeout_ns = 1000 * 1000000;
     fprintf(stdout, "worker[%ld] run\n", idx);
-    timespec end_time;
+    timespec timeout = {0, 100 * 1000000};
     if (idx < n_push_thread_)
     {
       for(int64_t i = 0; i < n_items_; i++) {
-        if (0 != (err = queue_.push((void*)(i+1), calc_abs_time(&end_time, timeout_ns))))
+        if (0 != (err = queue_.push((void*)(i+1), &timeout)))
         {
           fprintf(stderr, "push(idx=%ld, i=%ld)=>%d\n", idx, i, err);
         }
         //__sync_fetch_and_add(&n_item_pushed_, 1);
       }
-      //__sync_fetch_and_add(&n_push_done_, 1);
+      __sync_fetch_and_add(&n_push_done_, 1);
     }
     else
     {
       void* p = NULL;
-      for(int64_t i = 0; i < n_items_; i++) {
-        if (0 != (err = queue_.pop(p, calc_abs_time(&end_time, timeout_ns))))
+      for(int64_t i = 0; n_push_done_ < n_push_thread_; i++){
+        if (0 != (err = queue_.pop(p, &timeout)))
         {
           fprintf(stderr, "pop(idx=%ld, i=%ld)=>%d\n", idx, i, err);
         }
@@ -289,7 +288,7 @@ int main(int argc, char** argv)
   int64_t n_push_thread = 0;
   int64_t n_pop_thread = 0;
   int64_t n_items = 0;
-  int64_t queue_len_shift = 2;
+  int64_t queue_len_shift = 10;
   if (argc != 4)
   {
     err = -EINVAL;
