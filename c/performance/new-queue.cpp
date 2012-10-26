@@ -13,22 +13,19 @@
 #define CAS(addr, oldv, newv) __sync_bool_compare_and_swap(addr, oldv, newv)
 #define futex(...) syscall(SYS_futex,__VA_ARGS__)
 
-int decrement_if_positive(int* p)
-{
-  int x = 0;
-  while((x = *p) > 0 && !__sync_bool_compare_and_swap(p, x, x - 1))
-    ;
-  return x;
-}
-
 #define NS_PER_SEC 1000000000
 timespec* calc_remain_timespec(timespec* remain, const timespec* end_time)
 {
+  timespec* ret = NULL;
   timespec now;
   if (NULL == end_time || NULL == remain)
   {}
   else if (0 != clock_gettime(CLOCK_REALTIME, &now))
-  {}
+  {
+    remain->tv_sec = 0;
+    remain->tv_nsec = 0;
+    ret = remain;
+  }
   else
   {
     remain->tv_sec = end_time->tv_sec - now.tv_sec;
@@ -38,8 +35,9 @@ timespec* calc_remain_timespec(timespec* remain, const timespec* end_time)
       remain->tv_sec--;
       remain->tv_nsec + NS_PER_SEC;
     }
+    ret = remain;
   }
-  return remain;
+  return ret;
 }
 
 timespec* calc_abs_time(timespec* ts, const int64_t time_ns)
@@ -60,131 +58,140 @@ timespec* calc_abs_time(timespec* ts, const int64_t time_ns)
   return ts;
 }
 
-bool is_timeout(const timespec* end_time)
-{
-  return false;
-}
-
-struct my_sem_t
-{
-  int32_t val_;
-  int32_t nwaiters_;
-};
-
-static int futex_post(my_sem_t* p)
+static int futex_wake(int* p, int val)
 {
   int err = 0;
-  if (__sync_fetch_and_add(&p->val_, 1) >= INT_MAX)
+  if (0 != futex(p, FUTEX_WAKE_PRIVATE, val, NULL, NULL, 0))
   {
-    err = EOVERFLOW;
-  }
-  else if (p->nwaiters_ > 0)
-  {
-    err = futex(&p->val_, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+    err = errno;
   }
   return err;
 }
 
-static int futex_wait(my_sem_t* p, const timespec* end_time)
+static int futex_wait(int* p, int val, const timespec* end_time)
 {
   int err = 0;
   timespec remain;
-  if (decrement_if_positive(&p->val_) > 0)
-  {}
-  else
+  if (0 != futex(p, FUTEX_WAIT_PRIVATE, val, calc_remain_timespec(&remain, end_time), NULL, 0))
   {
-    __sync_fetch_and_add(&p->nwaiters_, 1);
-    while(1)
-    {
-      calc_remain_timespec(&remain, end_time);
-      if (remain.tv_sec < 0)
-      {
-        err = ETIMEDOUT;
-        break;
-      }
-      if (0 != (err = futex(p->val_, FUTEX_WAIT_PRIVATE, 0, &remain, NULL, 0))
-          && EWOULDBLOCK != err)
-      {
-        break;
-      }
-      if (decrement_if_positive(&p->val_) > 0)
-      {
-        err = 0;
-        break;
-      }
-    }
-    __sync_fetch_and_add(&p->nwaiters_, -1);
+    err = errno;
   }
   return err;
 }
+
+int dec_if_gt0(volatile int* p)
+{
+  int x = 0;
+  while((x = *p) > 0 && !CAS(p, x, x - 1))
+    ;
+  return x;
+}
+
+int inc_if_le0(volatile int* p)
+{
+  int x = 0;
+  while((x = *p) <= 0 && !CAS(p, x, x + 1))
+    ;
+  return x;
+}
+
+struct FCounter
+{
+  int32_t val_;
+  int32_t n_waiters_;
+  FCounter(): val_(0), n_waiters_(0) {}
+  ~FCounter() {}
+  int32_t inc(const timespec* end_time)
+  {
+    int err = 0;
+    int32_t val = 0;
+    if ((val = inc_if_le0(&val_)) <= 0)
+    {}
+    else
+    {
+      __sync_add_and_fetch(&n_waiters_, 1);
+      while(true)
+      {
+        if (ETIMEDOUT == (err = futex_wait(&val_, val, end_time)))
+        {
+          val = __sync_fetch_and_add(&val_, 1);
+          break;
+        }
+        if ((val = inc_if_le0(&val_)) <= 0)
+        {
+          break;
+        }
+      }
+      __sync_add_and_fetch(&n_waiters_, -1);
+    }
+    if (n_waiters_ > 0)
+    {
+      futex_wake(&val_, INT_MAX);
+    }
+    return val;
+  }
+
+  int32_t dec(const timespec* end_time)
+  {
+    int err = 0;
+    int32_t val = 0;
+    if ((val = dec_if_gt0(&val_)) > 0)
+    {}
+    else
+    {
+      __sync_add_and_fetch(&n_waiters_, 1);
+      while(true)
+      {
+        if (ETIMEDOUT == (err = futex_wait(&val_, val, end_time)))
+        {
+          val = __sync_fetch_and_add(&val_, -1);
+          break;
+        }
+        if ((val = dec_if_gt0(&val_)) > 0)
+        {
+          break;
+        }
+      }
+      __sync_add_and_fetch(&n_waiters_, -1);
+    }
+    if (n_waiters_ > 0)
+    {
+      futex_wake(&val_, INT_MAX);
+    }
+    return val;
+  }
+};
 
 class Queue
 {
   public:
     struct Item
     {
-      volatile int32_t total_;
-      volatile int32_t overflow_;
-      int32_t n_push_waiter_;
-      int32_t n_pop_waiter_;
+      FCounter counter_;
       void* volatile data_;
       int push(void* data, const timespec* end_time) {
-        int err = -EAGAIN;
-        int32_t total = __sync_add_and_fetch(&total_, 1);
-        if (inc_if_le0(&total_) <= 0)
-        {}
+        int err = 0;
+        if (counter_.inc(end_time) != 0)
+        {
+          err = -EAGAIN;
+        }
         else
         {
-          __sync_add_and_fetch(&n_waiter_, 1);
-          while(true)
-          {
-          }
-          __sync_add_and_fetch(&n_waiter_, -1);
-        }
-        while(true)
-        {
-          if (CAS(&data_, NULL, data))
-          {
-            err = 0;
-            break;
-          }
-          else if (overflow_ < 0)
-          {
-            break;
-          }
-          else if (is_timeout(end_time))
-          {
-            break;
-          }
-        }
-        if (-EAGAIN == err)
-        {
-          __sync_add_and_fetch(&overflow_, 1);
+          while(!CAS(&data_, NULL, data))
+            ;
         }
         return err;
       }
       int pop(void*& data, const timespec* end_time) {
-        int err = -EAGAIN;
-        //int32_t total = __sync_add_and_fetch(&total_, -1);
-        while(true)
+        int err = 0;
+        if (counter_.dec(end_time) != 1)
         {
-          if (NULL != (data = data_) && CAS(&data_, data, NULL))
-          {
-            err = 0;
-            break;
-          }
-          else if (overflow_ > 0)
-          {
-            break;
-          }
-          else if (is_timeout(end_time))
-          {
-            break;
-          }
+          err = -EAGAIN;
         }
-        if (-EAGAIN == err)
+        else
         {
-          __sync_add_and_fetch(&overflow_, -1);
+          while(!(NULL != (data = data_) && CAS(&data_, data, NULL)))
+            ;
         }
         return err;
       }
@@ -215,7 +222,6 @@ class Queue
       int err = 0;
       uint64_t seq = __sync_fetch_and_add(&pop_, 1);
       Item* pi = items_ + (seq & pos_mask_);
-      int32_t total = __sync_fetch_and_add(&pi->total_, 1);
       err = pi->pop(data, end_time);
       return err;
     }
@@ -231,10 +237,11 @@ struct QueueCallable: public Callable
 {
   Queue queue_;
   int64_t n_items_;
+  int64_t n_item_pushed_;
   int64_t n_push_done_;
   int64_t n_push_thread_;
   int64_t n_pop_thread_;
-  QueueCallable(): n_items_(0), n_push_done_(0), n_push_thread_(0), n_pop_thread_(0) {}
+  QueueCallable(): n_items_(0), n_item_pushed_(0), n_push_done_(0), n_push_thread_(0), n_pop_thread_(0) {}
   ~QueueCallable() {}
   QueueCallable& set(int64_t n_items, int64_t queue_len_shift, int64_t n_push_thread, int64_t n_pop_thread) {
     fprintf(stderr, "queue_callable(n_items=%ld, queue_len=%ld)\n", n_items, 1<<queue_len_shift);
@@ -246,21 +253,28 @@ struct QueueCallable: public Callable
   }
   int call(pthread_t thread, int64_t idx) {
     int err = 0;
+    int64_t timeout_ns = 10 * 1000000;
     fprintf(stdout, "worker[%ld] run\n", idx);
     timespec end_time;
     if (idx < n_push_thread_)
     {
       for(int64_t i = 0; i < n_items_; i++) {
-        queue_.push((void*)(i+1), NULL);
+        if (0 != (err = queue_.push((void*)(i+1), calc_abs_time(&end_time, timeout_ns))))
+        {
+          fprintf(stderr, "push(idx=%ld, i=%ld)=>%d\n", idx, i, err);
+        }
+        //__sync_fetch_and_add(&n_item_pushed_, 1);
       }
-      __sync_fetch_and_add(&n_push_done_, 1);
+      //__sync_fetch_and_add(&n_push_done_, 1);
     }
     else
     {
       void* p = NULL;
-      for(; n_push_done_ < n_push_thread_; ) {
-        calc_abs_time(&end_time, 10000000);
-        queue_.pop(p, &end_time);
+      for(int64_t i = 0; i < n_items_; i++) {
+        if (0 != (err = queue_.pop(p, calc_abs_time(&end_time, timeout_ns))))
+        {
+          fprintf(stderr, "pop(idx=%ld, i=%ld)=>%d\n", idx, i, err);
+        }
       }
     }
     return err;
@@ -275,7 +289,7 @@ int main(int argc, char** argv)
   int64_t n_push_thread = 0;
   int64_t n_pop_thread = 0;
   int64_t n_items = 0;
-  int64_t queue_len_shift = 10;
+  int64_t queue_len_shift = 2;
   if (argc != 4)
   {
     err = -EINVAL;
