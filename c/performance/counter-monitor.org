@@ -1,0 +1,24 @@
+#+Title: Counter Monitor
+
+为了测试性能，通常需要定时观测一个变量的值。不仅如此，一般我们还希望知道某个指标在一个时间段内的平均值。
+
+下面的代码可以帮助我们完成watch一个counter的功能，当然限制是只能watch一个变量。
+#+begin_src cpp
+int watch_counter(volatile int64_t* counter, int64_t interval_us, int64_t duration_us, const char* msg)
+{
+  int64_t start_time_us = get_usec();
+  int64_t cur_time_us = 0;
+  int64_t old_counter = 0;
+  while(1)
+  {
+    cur_time_us = get_usec();
+    if (start_time_us + duration_us < cur_time_us)
+      break;
+    printf("[%ldus %s]=%ld:%ld\n", cur_time_us - start_time_us, msg, *counter, 1000000* (*counter - old_counter)/interval_us);
+    old_counter = *counter;
+    usleep(interval_us);
+  }
+  return 0;
+}
+#+end_src
+当然usleep是可能被signal打断的，导致计时不准确，这里没有考虑这种情况。

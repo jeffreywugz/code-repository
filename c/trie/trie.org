@@ -1,0 +1,14 @@
+#+Title: Trie
+字符串做key的map比较常见，与通用的map相比，有一些优化方法，特别是可以使用前缀树实现，或者叫trie。
+但是一般的trie每个节点的出度需要是256，太浪费内存。
+所以更常用的是一种ternary tree。
+
+Ternary tree的节点有4个域，一个字符，三个指针。如果下一个字符小于 =cur-char=, 就沿着 =left-child-pointer= 向下找，
+如果下一个字符大于 =cur-char=, 就沿着 =right-child-pointer= 向下找，如果下一个字符等于 =cur-char= 就沿着 =eq-pointer= 
+向下找。
+#+begin_example
+                    cur-char
+left-child-pointer, eq-pointer, right-child-pointer
+#+end_example
+这样Ternary tree浪费的内存是每个字节三个pointer，如果我们把字符串按8个字节一组进行划分，那么相当于浪费了三倍的空间。
+但是由于公用的前缀只保留了一份，所以综合起来说不定反而会节省空间。

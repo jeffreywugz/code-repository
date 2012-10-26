@@ -7,9 +7,11 @@
 #include <unistd.h>
 #include <assert.h>
 
-#define mfence() __asm__("mfence");
-#define clear_bit(x, n) (x &= ~(1ULL<<n))
-#define set_bit(x, n) (x |= (1ULL<<n))
+//#define mfence() __asm__ volatile("mfence;\n");
+#define mfence() __sync_synchronize()
+#define mfence()
+#define clear_bit(x, n) ((x) &= ~(1ULL<<(n)))
+#define set_bit(x, n) ((x) |= (1ULL<<(n)))
 #define first_1bit(x) ((int64_t)__builtin_ffsll(x) - 1)
 
 class SmallIdSet
@@ -19,15 +21,27 @@ class SmallIdSet
     static const int64_t unit_size = 64;
     static const uint64_t lock_mask = (1ULL<<(unit_size-1));
   public:
-    SmallIdSet(): lock_(0) { clear(); }
+    SmallIdSet(): lock_(0) { clear(); pthread_mutex_init(&mutex_, NULL); }
     ~SmallIdSet() {}
     void clear() { header_ = ~0ULL; memset((void*)bits_, ~0u, sizeof(bits_)); }
+#if 0
     bool lock() {
-      return __sync_bool_compare_and_swap(&lock_, 0, 1);
+      pthread_mutex_lock(&mutex_);
     }
     bool unlock() {
-      return __sync_bool_compare_and_swap(&lock_, 1, 0);
+      pthread_mutex_unlock(&mutex_);
     }
+#else    
+    bool lock() {
+      bool locked = __sync_bool_compare_and_swap(&lock_, 0ULL, 1ULL);
+      mfence();
+      return locked;
+    }
+    bool unlock() {
+      mfence();
+      return __sync_bool_compare_and_swap(&lock_, 1ULL, 0ULL);
+    }
+#endif    
     int alloc(int64_t& id) {
       int err = 0;
       int64_t unit_idx = 0;
@@ -76,7 +90,7 @@ class SmallIdSet
       {
         err = -EDOM;
       }
-      return 0;
+      return err;
     }
     int check() {
       uint64_t std_bits[unit_size];
@@ -84,6 +98,7 @@ class SmallIdSet
       return memcmp((void*)bits_, std_bits, sizeof(std_bits));
     }
   private:
+    pthread_mutex_t mutex_;
     volatile int64_t lock_;
     uint64_t header_;
     uint64_t bits_[unit_size];
@@ -145,6 +160,15 @@ int seq_test(int64_t n)
 
 int main(int argc, char *argv[])
 {
-  //return seq_test(1000);
-  return test_id_set(10, 1000);
+  int err = 0;
+  if (argc != 3)
+  {
+    fprintf(stderr, "%s n_thread n_id\n", argv[0]);
+    err = -EINVAL;
+  }
+  else
+  {
+    err = test_id_set(atoll(argv[1]), atoll(argv[2]));
+  }
+  return err;
 }

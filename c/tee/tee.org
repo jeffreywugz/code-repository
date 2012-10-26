@@ -1,0 +1,29 @@
+#+Title: tee
+
+因为标准的shell工具tee不能处理EAGAIN错误，所以有时用起来不太方便。
+要实现一个高效的tee，要考虑一下几个优化点:
+1. 使用tee()系统调用, 这个系统调用概念上把一个管道的数据拷贝到另一个管道，
+   但是省掉了真正的拷贝操作，但是限制是只能作用于两个管道。同时tee()不会影响输入输出文件的位置。
+   #+begin_src cpp
+   long tee(int fd_in, int fd_out, size_t len, unsigned int flags);
+   #+end_src
+2. 使用splice()系统调用, 把一个文件的数据拷贝到文件，但是可以不经过内核态到用户态的拷贝。
+   和tee()不一样，两个文件描述符不必是管道。
+   #+begin_src cpp
+   long splice(int fd_in, off_t *off_in, int fd_out,
+              off_t *off_out, size_t len, unsigned int flags);   
+   #+end_src
+上面的优化虽然有限制，但是可以覆盖大部分tee使用的场景。
+
+最后要解决的一个问题是，如何判断一个文件结束了。如果是block io，那么read()返回空数据就说明文件结束了。
+如果是noblock io，那么read()可能会返回EAGAIN，最后，不管是block io还是noblock io，read()可能会被signal打断。
+所以正确的判断读到了一个文件末尾的方法：
+#+begin_src cpp
+count = read(fd, buf, limit);
+if (count == -1) {
+  if (errno == EAGAIN){ //nonblock io, need retry; }
+  else if (errno == EINTR){ //signaled, need retry; }
+}
+else if (count == 0){ // 文件结束; }
+#+end_src
+

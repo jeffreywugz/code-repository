@@ -1,0 +1,16 @@
+#+Title: rdtsc
+如何更精确的获取时间?
+要测试性能，需要准确的获取时间，除了 =gettimeofday()= 和 =clock_gettime()= 之外，还有一个很精确并且代价很小的获取时间方法。
+=rdtsc=, 这条指令读取 =CPU= 的cycle数。
+#+begin_example
+inline unsigned long long rdtsc(void)
+{
+   unsigned long long int x;
+   __asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
+   return x;
+}
+#+end_example
+虽然很多人依然在使用rdtsc获取CPU的cycle数，但是实际上获取的数值并不准确，原因包括:
+1. 多核处理器上不同核上的cycle数不能完美同步。
+2. 为了节能，CPU的频率是可变的。
+3. 由于乱序执行， =rdtsc= 可能会延后执行。

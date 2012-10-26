@@ -1,0 +1,36 @@
+#+Title: 如何定义不能拷贝的类
+
+如果一个类引用了动态分配的内存，那么拷贝这个类就需要再次分配这些内存，如果我们写代码的时候没有注意，
+编译器会自动帮我们为某个类生成一个拷贝构造函数，但是这个拷贝构造函数只是浅拷贝，一般并不是我们需要的。
+所以一个良好的编程习惯是为每一个类定义拷贝构造函数，禁止编译器自动生成它。
+
+但是考虑到实际编码的时候很多类都不会真正地需要拷贝，我们通常只是想禁止拷贝。更准确的说，希望用户使用
+拷贝构造函数的时候报错。这一般通过把拷贝构造函数声明为私有的来实现。
+#+begin_src cpp
+#define DISALLOW_COPY_AND_ASSIGN(TypeName) \
+    TypeName(const TypeName&);               \
+  void operator=(const TypeName&)
+
+class B
+{
+  private:
+    DISALLOW_COPY_AND_ASSIGN(B);
+};
+#+end_src
+
+但是这种方法不太优美，实际上可以让类B继承一个拷贝构造函数为私有的类，这样编译器在为类B生成拷贝构造函数的时候就会报错。
+#+begin_src cpp
+class NonCopyable
+{
+  public:
+    NonCopyable(){}
+    ~NonCopyable(){}
+  private:
+    NonCopyable(const NonCopyable&);
+    void operator=(const NonCopyable&);
+};
+
+class A: NonCopyable
+{};
+#+end_src
+这种方法的代码更简洁。

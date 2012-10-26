@@ -1,0 +1,21 @@
+#+Title:
+
+要在多台机器之间拷贝大文件，假如这些机器是同构的并且数量不是很多，那么可以在这些机器之间建立一个数据管道。
+第一台机器拷贝给第二台机器，第二台机器拷贝给第三台机器...。
+
+下面的代码可以完成链式拷贝。
+#+begin_src sh
+pcp=~/pcp.sh
+local_host=${1%%:*}
+local_path=${1#*:}
+shift 1
+next_host=${1%%:*}
+
+if [ -z "$next_host" ]; then
+    cat >$local_path
+else
+    tee $local_path  | ssh $next_host $pcp $*
+fi
+#+end_src
+不过可惜的是由于 =tee= 无法处理 =EAGAIN= 错误，所以上面的脚步基本上无法使用。
+http://serverfault.com/questions/369757/why-is-this-tee-losing-stdout

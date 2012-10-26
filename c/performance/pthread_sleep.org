@@ -1,0 +1,77 @@
+#+Title: pthread sleep
+
+关于时间的函数：
+1. 如何获得当前的时间， 用 =int64_t= 表示:
+   如果要精确到micro second.
+   #+begin_src cpp
+   #include <sys/time.h>
+   int64_t get_usec() { 
+     int64_t usec = -1;
+     struct timeval tv;
+     if (0 != gettimeofday(&tv, NULL))
+     {}
+     else
+     {
+       usec = tv.tv_sec * 1000000 + tv.tv_usec;
+     }
+     return usec;
+   }
+   #+end_src
+   如果要精确到nano second。
+   #+begin_src cpp
+   #include <sys/time.h>
+   int64_t get_nsec() {
+     int64_t nsec = -1;
+     struct timespec now;
+     if (0 != clock_gettime(CLOCK_REALTIME, &now))
+     {}
+     else
+     {
+       nsec = now.tv_sec * 1000000000 + now.tv_n_sec;
+     }
+     return nsec;
+   }
+   #+end_src
+   链接时要加 =-lrt= 选项。
+2. 如何sleep.
+   #+begin_src cpp
+   #include <unistd.h>
+   unsigned sleep(unsigned sec);
+   void usleep(unsigned long usec);
+   #define _POSIX_C_SOURCE 199309 #include <time.h>
+   int nanosleep(const struct timespec *req, struct timespec *rem);
+   #+end_src
+   上面的三个函数精度不一样，但是都可能会被signal中断。
+   要安全的sleep一段时间，可以用 =pthread_cond_timedwait()=
+   #+begin_src cpp
+    timespec* calc_abs_time(timespec* ts, const int64_t time_ns)
+    {
+      if (NULL == ts)
+      {}
+      else if (0 != (clock_gettime(CLOCK_REALTIME, ts)))
+      {}
+      else
+      {
+        ts->tv_nsec += time_ns;
+        if (ts->tv_nsec > NS_PER_SEC)
+        {
+          ts->tv_sec += ts->tv_sec/NS_PER_SEC;
+          ts->tv_nsec %= NS_PER_SEC;
+        }
+      }
+      return ts;
+    }
+    
+    int pthread_sleep(int64_t nsec)
+    {
+      pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+      pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+      struct timespec abs_time;
+      pthread_mutex_lock(&mutex);
+      pthread_cond_timedwait(&cond, &mutex, calc_abs_time(&abs_time, nsec));
+      pthread_mutex_unlock(&mutex);
+      pthread_mutex_destroy(&mutex);
+      pthread_cond_destroy(&cond);
+      return 0;
+    }
+    #+end_src

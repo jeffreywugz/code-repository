@@ -1,0 +1,33 @@
+#+Title: 如何对6个整数排序
+
+如果最快地对6个整数排序? http://stackoverflow.com/questions/2786899/fastest-sort-of-fixed-length-6-int-array.
+这个问题一点都不简单，显然因为n太小，快速排序和归并排序都不合适，实际上它们都不如简单的插入排序快。
+
+但是因为n是个给定的数，所以存在最优的排序算法，这个算法就是使用排序网络。
+这里的最优指在最坏的情况下比较的次数最少，在实际执行的时候不一定是最快的。
+#+begin_example
+static inline void sort6_sorting_network_simple_swap(int * d){
+#define min(x, y) (x<y?x:y)
+#define max(x, y) (x<y?y:x) 
+#define SWAP(x,y) { const int a = min(d[x], d[y]); const int b = max(d[x], d[y]); d[x] = a; d[y] = b;}
+    SWAP(1, 2);
+    SWAP(4, 5);
+    SWAP(0, 2);
+    SWAP(3, 5);
+    SWAP(0, 1);
+    SWAP(3, 4);
+    SWAP(1, 4);
+    SWAP(0, 3);
+    SWAP(2, 5);
+    SWAP(1, 3);
+    SWAP(2, 4);
+    SWAP(2, 3);
+#undef SWAP
+#undef min
+#undef max
+}
+#+end_example
+这个算法不仅通过使用sorting network来减少比较次数，而且通过调整SWAP的顺序，减少了流水线的stall。
+
+目前没有算法决定n个整数的最优的sorting network是什么样的。小于16的整数的最优sorting network是已知的。
+http://www.cs.brandeis.edu/~hugues/sorting_networks.html

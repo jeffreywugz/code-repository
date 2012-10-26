@@ -13,7 +13,7 @@
 #define CAS(addr, oldv, newv) __sync_bool_compare_and_swap(addr, oldv, newv)
 #define futex(...) syscall(SYS_futex,__VA_ARGS__)
 
-int decrement_if_positive(int* p)
+int decrement_if_positive(volatile int* p)
 {
   int x = 0;
   while((x = *p) > 0 && !__sync_bool_compare_and_swap(p, x, x - 1))

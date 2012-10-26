@@ -1,0 +1,21 @@
+#+Title: fast max
+取两个数中的最大值，当然很简单:
+#+begin_example
+int max(int x, int y){ return x>y? x: y; }
+#+end_example
+
+但是有另一种很另类的方法：
+#+begin_example
+#define max(x, y) (x ^ ((x ^ y) & -(x < y)))
+#+end_example
+这种方法为什么正确呢？
+假如 =x < y= 成立，最后结果为:
+#+begin_example
+x ^ ((x^y) & -1) = x ^ (x^y) = y
+#+end_example
+假如 =x < y= 不成立, 最后结果为:
+#+begin_example
+x ^ ((x^y) & 0) = x ^ 0 = x
+#+end_example
+这种取最大值的方法优点是没有分支指令，所以在有些情况下可能更快。
+不过根据测试，最起码在现在的x64平台上，这种另类的方法是更慢的。

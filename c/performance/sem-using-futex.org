@@ -1,0 +1,78 @@
+#+Title: futex
+* Futex
+记一下用futex的两个基本操作。futex是linux提供的用来提供实现 =semaphore，pthread_mutex, pthread_cond= 操作的底层系统调用。
+futex提供两种操作: =WAIT(int32_t* addr, int32_t val)= 和 =WAKEUP(int32_t* addr, int32_t val)=, 其中 =addr= 需要是4字节对齐的。
+这里只是两种操作的示意，给出的并不是实际的函数原型。
+这两个操作的语义是:
+1. WAIT:
+   #+begin_src cpp
+   int WAIT(int32_t* addr, int32_t val)
+   {
+     // 原子性地做如下的操作
+     if (*addr != val)return EWOULDBLOCK;
+     return wait_on(addr); //进入睡眠，并且把自己与addr关联起来，WAKEUP（addr, val)可以唤醒。
+   }
+   #+end_src
+2. WAKEUP：
+   #+begin_src cpp
+   int WAKEUP(int32_t* addr, int32_t val)
+   {
+     唤醒等在addr上的至多val个线程。//如果当前没有线程等在addr上，WAKEUP调用没有作用
+   }
+   #+end_src
+需要说明的是，WAKEUP操作不需要等待，WAIT操作一般需要传递一个超时参数。并且实际使用时，WAKEUP一般指定唤醒一个线程或者所有线程，
+指定唤醒其余的特定数目的线程一般来说没有道理。
+
+从语义上，我们可以看到，内核需要为每个地址维护一个等待队列，这样WAKEUP才能知道要唤醒那些线程。
+但是不必担心传递给futex的地址太多，实际上，内核使用一个hash表维护 =addr= 到等待线程的映射关系，只有进入等待的线程才会在hash表中存在。
+内核里实现futex的代价与等待的线程数相关，与futex操作的 =addr= 的具体数目是没有关系的，
+所以只要内存够用，把多少个 =int32_t= 当作futex来用都行。
+
+最后，futex本身是可以实现跨进程的同步的，只要你把 =addr= 指向一个进程间共享内存的地址即可。
+不过如果不需要跨进程同步，只需要实现线程间同步，可以使用 =PRIVATE_WAIT= 和 =PRIVATE_WAKEUP= , 语义和上面一样，但是效率更高。
+
+* Semaphore
+信号量与一个整数关联，如果用futex实现，这个整数类型是 =int32_t= 。
+信号量可以用来实现队列的同步，它本身可以理解为一个队列，整数表示队列长度。信号量提供两种操作: =POST(sem)= 和 =WAIT(sem)= 。
+语义如下:
+1. =WAIT=
+   #+begin_src cpp
+   int WAIT(int32_t sem)
+   {
+     while(1) {
+       if (decrement_if_positive(sem) > 0) break;
+       wait_on(sem);
+     }
+   }
+   #+end_src
+2. =POST=
+   #+begin_src cpp
+   int POST(int32_t sem)
+   {
+     sem++;
+     wakeup_one(thread);
+     return 0;
+   }
+   #+end_src
+其中 =decrement_if_positive(x)= 所做的事是原子性判断x的值是否大于0，如果大于0，就把x减1，它返回x的原始值。
+
+上面的实现是正确的。但是可以优化，因为当没有线程等待时，就不应该wakeup。为了做这个优化，就需要把sem变为结构体，
+除了一个 =int32_t= 作为futex的参数外，还需要一个整数记录等待的线程数，不妨也用 =int32_t= 表示。
+#+begin_src cpp
+int WAIT(sem_t* sem)
+{
+   while(1) {
+      if (decrement_if_positive(sem->val_) > 0)break;
+      atomic_add(sem->n_waiter_, 1);
+      futex_wait(&sem->val_, 0);
+      atomic_add(sem->n_waiter_, -1);
+    }
+}
+
+int POST(sem_t* sem)
+{
+  atomic_add(sem->val_, 1);
+  if (sem->n_waiters_ > 0
+     wakeup(sem->val_, 1);
+}
+#+end_src

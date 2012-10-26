@@ -8,7 +8,7 @@
 
 int64_t check()
 {
-  static uint64_t s = 0;
+  volatile static uint64_t s = 0;
   int64_t err = 0;
   __sync_fetch_and_add(&s, 1);
   if (s >= 2)
@@ -17,8 +17,8 @@ int64_t check()
   return err;
 }
 
-int lockA = 0;
-int lockB = 0;
+volatile int lockA = 0;
+volatile int lockB = 0;
 int64_t funcA(int64_t n)
 {
   int64_t n_err = 0;

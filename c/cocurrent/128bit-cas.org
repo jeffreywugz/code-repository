@@ -1,0 +1,24 @@
+#+Title: 128bit CAS
+x64CPU支持128bit的CAS操作，使用 =LOCK CMPXCHG16B= 完成，但是 =gcc= 没有提供built-in函数，
+虽然 =gcc= 有 =__int128_t= 类型，也有 =__sync_bool_compare_and_swap()= 函数，但是这两者没法配合起来使用。
+
+所以要使用128bit的CAS操作，需要自己使用 =inline asm= 。
+#+begin_example
+bool cas( volatile types::uint128_t * src, types::uint128_t cmp, types::uint128_t with )
+{
+  bool result;
+  __asm__ __volatile__
+    (
+      "\n\tlock cmpxchg16b %1"
+      "\n\tsetz %0\n"
+      : "=q" ( result )
+        , "+m" ( *src )
+        , "+d" ( cmp.hi )
+        , "+a" ( cmp.lo )
+      : "c" ( with.hi )
+        , "b" ( with.lo )
+      : "cc"
+      );
+  return result;
+}
+#+end_example

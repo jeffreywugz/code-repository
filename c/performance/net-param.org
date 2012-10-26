@@ -1,0 +1,48 @@
+#+Title: network param
+
+怎么查看网络的带宽？
+* 用lspci查看有哪些物理网卡:
+   #+begin_example
+   #/sbin/lspci |grep Ethernet
+   03:00.0 Ethernet controller: Broadcom Corporation NetXtreme II BCM5708 Gigabit Ethernet (rev 12)
+   06:00.0 Ethernet controller: Broadcom Corporation NetXtreme II BCM5708 Gigabit Ethernet (rev 12)
+   #+end_example
+* 用ifconfig查看有哪些网络接口已经配置好了，比如确定有bond0, eth0, eth1三个NIC
+   #+begin_example
+   yuanqi.xhf@tfs035040 performance$ /sbin/ifconfig|grep Ethernet
+   bond0     Link encap:Ethernet  HWaddr 00:1A:64:65:7D:9C  
+   eth0      Link encap:Ethernet  HWaddr 00:1A:64:65:7D:9C  
+   eth1      Link encap:Ethernet  HWaddr 00:1A:64:65:7D:9C 
+   #+end_example
+* 再用dmesg|grep eth0 |grep 'Link is Up' 查看eth0的相关日志，最后会有如下的日志
+   #+begin_example
+   bnx2: eth0 NIC Copper Link is Up, 1000 Mbps full duplex   
+   #+end_example
+   在这种情况，eth0的工作带宽是1000Mbps.
+* 可以实际测量一下网络带宽，可以用nc(netcat)测量，但实际使用时发现误差较大。
+   也可以用如下的代码简单测量，实际测试结果还是比较准确的。
+   #+begin_src python
+   def server_start(addr, max_packet_len=1024):
+       sock = socket.socket()
+       sock.bind(addr)
+       sock.listen(1)
+       conn, client_addr = sock.accept()
+       print 'conn from %s'%(str(client_addr))
+       while True:
+           buf = conn.recv(max_packet_len)
+           if buf == 'end':
+               break
+   
+   def client_start(addr, max_packet_len=1024, duration=3):
+       sock = socket.socket()
+       sock.connect(addr)
+       buf = '0' * max_packet_len
+       end_time = time.time() + duration
+       bytes_send = 0
+       while time.time() < end_time:
+           sock.send(buf)
+           bytes_send += max_packet_len
+       print 'bandwidth = %dbyte/s'%(bytes_send/duration)
+       sock.send('end')
+       sock.close()
+   #+end_src

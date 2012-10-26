@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <sys/epoll.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -225,7 +226,7 @@ int handle_tcp_socket_event(void* self, int efd, int sfd, int fd, uint32_t sessi
         }
         else
         {
-          printf("%s\n", buf);
+          printf("%ld %s\n", count, buf);
         }
       }
       //printf("read(count=%ld)=>%d\n", count, err);
@@ -245,7 +246,24 @@ int handle_tcp_socket_event(void* self, int efd, int sfd, int fd, uint32_t sessi
   return err;
 }
 
-int run_client(int type, in_addr_t ip, int port, int64_t id, int64_t n_packets)
+int watch_counter(volatile int64_t* counter, int64_t interval_us, int64_t duration_us, const char* msg)
+{
+  int64_t start_time_us = get_usec();
+  int64_t cur_time_us = 0;
+  int64_t old_counter = 0;
+  while(1)
+  {
+    cur_time_us = get_usec();
+    if (start_time_us + duration_us < cur_time_us)
+      break;
+    printf("[%ldus %s]=%ld:%ld\n", cur_time_us - start_time_us, msg, *counter, 1000000* (*counter - old_counter)/interval_us);
+    old_counter = *counter;
+    usleep(interval_us);
+  }
+  return 0;
+}
+
+int run_client(int type, in_addr_t ip, int port, int64_t id, volatile int64_t* stop, volatile int64_t* npkts_send)
 {
   int err = 0;
   char id_buf[16];
@@ -255,7 +273,7 @@ int run_client(int type, in_addr_t ip, int port, int64_t id, int64_t n_packets)
   sin.sin_addr.s_addr = ip;
   sin.sin_family = AF_INET;
 
-  if (type != SOCK_STREAM)
+  if (type != SOCK_STREAM || NULL == stop)
   {
     err = -EINVAL;
   }
@@ -273,14 +291,15 @@ int run_client(int type, in_addr_t ip, int port, int64_t id, int64_t n_packets)
     perror("connect");
     err = -errno;
   }
-  for(int64_t i = 0; 0 == err && i < n_packets; i++)
+  for(int64_t i = 0; !*stop && 0 == err; i++)
   {
     if (0 >= (write(fd, id_buf, strlen(id_buf) + 1)))
     {
       perror("write");
       err = -errno;
     }
-    printf("client(i=%ld, id=%ld, packets=%ld)=>%d\n", i, id, n_packets, err);
+    __sync_fetch_and_add(npkts_send, 1);
+    //printf("client(i=%ld, id=%ld, packets=%ld)=>%d\n", i, id, n_packets, err);
   }
   if (fd > 0 && 0 != (close(fd)))
   {
@@ -297,17 +316,46 @@ int test_server(in_addr_t ip, int port)
   return run_server(SOCK_STREAM, ip, port, handle_tcp_socket_event, NULL, timeout_us);
 }
 
-int test_client(in_addr_t ip, int port, int64_t n_conn, int64_t n_packets)
+struct ClientCfg
+{
+  in_addr_t ip_;
+  int port_;
+  volatile int64_t stop_;
+  volatile int64_t npkts_send_;
+};
+
+int launch_client(struct ClientCfg* cfg)
+{
+  return run_client(SOCK_STREAM, cfg->ip_, cfg->port_, 0, &cfg->stop_, &cfg->npkts_send_);
+}
+
+int test_client(in_addr_t ip, int port, const int64_t n_conn, int64_t n_packets)
 {
   int err = 0;
+  pthread_t threads[n_conn];
   struct in_addr addr;
   addr.s_addr = ip;
+  struct ClientCfg client_cfg = {ip, port, 0, 0};
   printf("client(addr=%s:%d, n_conn=%ld, n_packets=%ld)\n", inet_ntoa(addr), port, n_conn, n_packets);
   for(int64_t i = 0; 0 == err && i < n_conn; i++)
   {
-    if (0 != (err = run_client(SOCK_STREAM, ip, port, i, n_packets)))
+    if (0 != (pthread_create(threads + i, NULL, launch_client, &client_cfg)))
     {
-      error("run_client(addr=%s:%d, id=%ld)=>%d", inet_ntoa(addr), port, i, err);
+      err = -EINVAL;
+      error("launch_client(addr=%s:%d, id=%ld)=>%d", inet_ntoa(addr), port, i, err);
+    }
+  }
+  if (0 == err)
+  {
+    watch_counter(&client_cfg.npkts_send_, 1000000, 30000000, "pkts");
+    client_cfg.stop_ = 1;
+  }
+  for(int64_t i = 0; 0 == err && i < n_conn; i++)
+  {
+    if (0 != (pthread_join(threads[i], NULL)))
+    {
+      err = -EINVAL;
+      error("wait_client(addr=%s:%d, id=%ld)=>%d", inet_ntoa(addr), port, i, err);
     }
   }
   return err;
@@ -317,9 +365,6 @@ int main(int argc, char **argv)
 {
   int err = 0;
   bool show_help = false;
-  int port = 0;
-  int64_t timeout_us = 1000000;
-  int64_t n = 0;
   if (argc < 2)
   {
     err = -EINVAL;
@@ -359,11 +404,5 @@ int main(int argc, char **argv)
     fprintf(stderr, "Usage:\n\t%1$s server ip port\n" "\t%1$s client ip port n_conn n_packet\n", argv[0]);
   }
 
-  port = atoi(argv[1]);
-  n = 1<<atoi(argv[2]);
-  if (port <= 0 || n <= 0)
-  {
-    return -1;
-  }
   return 0;
 }

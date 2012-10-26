@@ -1,5 +1,5 @@
-target = queue-with-sem
-spin-queue.args = 1 1 100000000
+target = spin-queue
+spin-queue.args = 1 1 100000
 queue-with-sem.args = 1 1 10000000
 rol.args =
 queue.args = 2 10000000

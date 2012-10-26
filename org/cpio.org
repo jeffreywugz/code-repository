@@ -1,0 +1,27 @@
+#+Title: cpio
+cpio是一个shell工具，名字是copy input/output的意思，平时用到的不多，但是要用到的时候总是看了帮助也不明白。
+这里小结一下。
+
+cpio有三种使用模式:
+1. copy out: 即根据文件名列表生成一个cpio格式的归档文件。文件名列表是从标准输入读取。
+   所以cpio的copy out模式经常跟find工具以前使用。
+   #+begin_example
+   cpio -o <file.list > archive.cpio
+   find . -name "*.c" |cpio -o >archive.cpio
+   #+end_example
+2. copy in: 把cpio归档中的内容提取出来，这个命令会创建目录和文件。
+   #+begin_example
+   cpio -idv < archive.cpio
+   #+end_example
+   特别有用的一点是可以指定只恢复文件名符合某种模式的文件，比如只恢复c文件。
+   #+begin_example
+   cpio -idv "*.c" < archive.cpio
+   #+end_example
+   '-d'表示根据需要创建目录，'-v'表示verbose模式。
+3. copy pass: 相当于先copy out，再copy in，不过没有中间的归档文件。首先需要一个文件名列表，这个列表也是从标准输入读取
+   然后需要指定一个目标目录，这个目录就是创建文件的目录。这种模式本质就是一个拷贝命令。
+   #+begin_example
+   cat file.list | cpio -p dest-dir
+   #+end_example
+
+最后不论是copy in，还是copy out模式，都可以接受'-c'选项，它指定归档文件带有头信息。

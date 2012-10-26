@@ -1,0 +1,49 @@
+#+Title: fast spin queue
+
+I have implemented a lockless queue, the Idea is simple: 
+1. Using fixed array to store queued items; 
+2. Sequential push/pop operations exchange data on different array locations which makes concurrent operations fast;
+3. Assign each push/pop operation an uniq increment seq number which determin the array index they will use.
+
+The code is simple:
+#+begin_src cpp
+#define CACHE_ALIGN_SIZE 64
+#define CACHE_ALIGNED __attribute__((aligned(CACHE_ALIGN_SIZE)))
+#define CAS(addr, oldv, newv) __sync_bool_compare_and_swap(addr, oldv, newv)
+
+class Queue
+{
+  public:
+    Queue(): push_(0), pop_(0), pos_mask_(0), items_(NULL) {}
+    ~Queue(){}
+    int init(uint64_t pos_mask, void** items) {
+      int err = 0;
+      pos_mask_ = pos_mask;
+      memset(items, 0, sizeof(void*) * (pos_mask + 1));
+      items_ = items;
+      return err;
+    }
+    int push(void* data) {
+      int err = 0;
+      uint64_t seq = __sync_fetch_and_add(&push_, 1);
+      void* volatile * pi = items_ + (seq & pos_mask_);
+      while(!CAS(pi, NULL, data))
+        ;
+      return err;
+    }
+    int pop(void*& data) {
+      int err = 0;
+      uint64_t seq = __sync_fetch_and_add(&pop_, 1);
+      void* volatile * pi = items_ + (seq & pos_mask_);
+      while(NULL == (data = *pi) || !CAS(pi, data, NULL))
+        ;
+      return err;
+    }
+    int64_t remain() const { return push_ - pop_; }
+  private:
+    volatile uint64_t push_ CACHE_ALIGNED;
+    volatile uint64_t pop_ CACHE_ALIGNED;
+    uint64_t pos_mask_ CACHE_ALIGNED;
+    void** items_;
+};
+#+end_src
