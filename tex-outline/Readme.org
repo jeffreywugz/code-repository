@@ -1,0 +1,38 @@
+#+Title: Outline Mode for Beamer
+#+options: toc:nil
+
+* Motivation
+** We can use beamer to generate good quality pdf presentations, but typeset nested environment is cumbersome. For example:
+#+begin_example   
+\begin{frame}{frame-title}
+\begin{itemize}
+  \item blah blah...
+     \begin{itemize}
+        \item ...
+        \item ...
+     \end{itemize}
+   \item
+\end{itemize}
+\end{frame}
+#+end_example   
+ 
+** We keep source file clean if we can use text markup to construct an outline of a presentation, like in emacs org-mode. For example:
+#+begin_example
+* frame1
+** item1
+*** item3
+*** item4
+** item2
+#+end_example   
+   
+** Alternatively, you can use ``export-org-as-html'' functions. But work directly with latex source does have its benifits:
+   + remove dependency of emacs org-mode.
+   + generation flow, no extra generated file.
+   + debug directly on latex file.
+
+* Usages
+#+begin_example   
+\usepackage{outline}
+\begin{outline}
+\end{outline}
+#+end_example   

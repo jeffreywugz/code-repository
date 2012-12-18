@@ -1,0 +1,44 @@
+\documentclass{article}
+\tracingmacros=1
+
+\def\outlinedefs{1/section,2/subsection,3/item,4/subitem}
+
+\def\iter#1#2{\def\xiter##1,{\ifx##1\relax\else #1##1,\expandafter\xiter\fi} \xiter#2,\relax,}
+\def\select#1#2{\def\selector##1/##2,{\ifx ##1#1 ##2\fi} \iter\selector#2}
+
+\newcount\idx
+\def\enum#1{\idx=0 \def\enumerator##1,{\advance \idx by 1 \ifnum\idx>1,\fi \number\idx/##1} \iter\enumerator{#1}}
+
+\newcount\nstar
+\def\endsmartline{smart\select\expandafter\nstar{\outline}}
+\def\xsmartline#1{\if#1* \advance \nstar by 1 \expandafter\xsmartline \else \expandafter\endsmartline #1\fi}
+\def\smartline{\nstar=0 \xsmartline}
+% % \catcode`\^^M=13
+% % \let^^M\smartline
+ % \smartline * emacs@mark.tex
+ % \smartline ** compile
+
+\def\openitem{\begin{item}}
+\def\closeitem{\end{item}}
+\def\setitem{\item}
+\def\opensubitem{\begin{item}}
+\def\closesubitem{\end{item}}
+\def\setsubitem{\item}
+
+\newcount\outlinedepth
+\def\i#1{
+  \def\itemdef{\select#1\outlinedefs}
+  \def\olditemdef{\select\outlinedepth\outlinedefs}
+  \ifnum#1<\outlinedepth `close \olditemdef' \fi
+  \ifnum#1>\outlinedepth `open \itemdef' \fi
+  \itemdef
+  \outlinedepth=#1
+}
+
+\def\reverseX#1,{
+  \ifx#1\relax \else \reverse \fi
+}
+\def\reverse#1{ \reverseX,#1}
+\begin{document}
+\reverse{\head,abc,def,ghi,\tail,}
+\end{document}

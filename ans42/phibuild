@@ -1,0 +1,29 @@
+TARGET=$(shell basename `pwd`)
+CSRCS= $(wildcard *.c)
+SSRCS= $(wildcard *.s)
+OBJS= $(patsubst %.c,%.o,$(CSRCS)) $(patsubst %.s,%.o,$(SSRCS))
+
+CC=gcc
+INCFLAG=-I. -I../include
+CPP=cpp $(INCFLAG)
+SPP=cpp -x assembler-with-cpp $(INCFLAG)
+CFLAG=-Wall -Werror -g -m32 -march=i386 -oformart=i386 -fstrength-reduce -fomit-frame-pointer -finline-functions -nostdinc -ffreestanding $(INCFLAG)
+AS=gcc -x assembler-with-cpp
+ASFLAG=-g -m32 -march=i386 -oformat=elf-i386 $(INCFLAG)
+LD=ld
+LDFLAG=-r -melf_i386 --oformat elf32-i386
+
+.PHONY: all clean dep
+
+all: $(TARGET).ko
+$(TARGET).ko: $(OBJS)
+	$(LD) $(LDFLAG) $^ -o $@
+%.o: %.c
+	$(CC) -c  $(CFLAG) $< -o $@
+%.o: %.s
+	$(AS) -c $(ASFLAG) $< -o $@
+clean:
+	rm -rf *.ko *.o .dep
+dep:
+	(for f in $(CSRCS); do $(CPP) -M -MM -MG $$f; done; for f in $(SSRCS); do $(SPP) -M -MM -MG $$f; done) >.dep
+-include .dep

@@ -1,0 +1,65 @@
+\ProvidesPackage{outline}
+\def\i#1.{
+\long\def\iblock##1\i#1.{
+\ifx&##1&%
+\else
+\def\iblock@rest{\handle##1\i.\i.\i#1.}
+\expandafter\iblock@rest
+\fi
+}
+\iblock
+}
+
+\def\s/#1:{
+  \ifx&#1&%
+  \else
+  \def\styles{#1/:}
+  \fi
+}
+\long\def\handle#1\i#2\i.{\handleX#1\par\i#2\i.}
+\long\def\handleX#1\par{\handleXx#1\s/:\par}
+\def\styled#1/#2:{\csname#1\endcsname \def\styles{#2/:}}
+\def\styledX#1{{\expandafter\styled\styles#1}}
+\long\def\handleXx#1\s#2\par#3\i#4\i.{
+  \def\test{.} \def\target{#4}
+  \ifx\test\target%
+  \def\rest{\nf{#1}{}}
+  \expandafter\rest
+  \else
+  \def\handleX@body{\i#4\i.\i.}
+  \def\rest{\nf{#1}{{\s#2\par#3\styledX{\cf{\expandafter\handleX@body\endoutline}}}}\i.}
+  \expandafter\rest
+  \fi
+}
+
+\long\def\echo#1{#1}
+\long\def\group#1#2{([#1],#2)}
+
+\long\def\onesection#1#2{\section{#1}#2}
+\long\def\onesubsection#1#2{\subsection{#1}#2}
+\long\def\oneitem#1#2{\item #1 #2}
+\long\def\groupeditems#1{\begin{itemize}#1\end{itemize}}
+\long\def\oneframe#1#2{\begin{frame}{#1}\let\nf\group#2\end{frame}}
+\long\def\oneblock#1#2{\begin{block}{#1}#2\end{block}}
+\newcommand{\columnedX}[1][.5]{\column{#1\textwidth}}
+\long\def\onecol#1#2{\columnedX#1#2}
+\long\def\groupedcols#1{\begin{columns}#1\end{columns}}
+
+\def\grouped{\let\nf\group \let\cf\echo}
+\def\sectioned{\let\nf\onesection \let\cf\echo}
+\def\subsectioned{\let\nf\onesubsection \let\cf\echo}
+\def\itemed{\let\nf\oneitem \let\cf\groupeditems}
+\def\framed{\let\nf\oneframe \let\cf\echo}
+\def\blocked{\let\nf\oneblock \let\cf\echo}
+\def\columned{\let\nf\onecol \let\cf\groupedcols}
+
+\long\def\outline#1\endoutline{
+  \def\testX{a#1b}
+  \def\emptyX{a b}
+  \ifx\testX\emptyX%
+  \else
+  \def\outline@body{#1\i.\i.}\styledX{\cf{\expandafter\outline@body\endoutline}}
+  \fi
+}
+\def\endoutline{\i+++.\i+++.\i++.\i++.\i+.\i+.\i***.\i***.\i**.\i**.\i*.\i*.\i===.\i===.\i==.\i==.\i=.\i=.}
+\newcommand{\beginoutline}[1][sectioned/framed/itemed]{\def\styles{#1/:}\outline}

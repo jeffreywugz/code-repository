@@ -1,0 +1,37 @@
+#+Title: Archlinux Packages Analysis
+
+* Motivation
+use =pacman python matplotlib graphviz= to analysis ArchLinux Packages Repository by statistics and visualization.
+
+* Analysis
+** Number of packages and groups of remote repositories
+#+begin_src sh :exports results
+matv.py 'pacman $r $c|wc -l' '[packages]-Sl,[groups]-Sg' '[all],core,extra,community'
+#+end_src
+
+#+results:
+| X        |  all | core | extra | community |
+| packages | 5122 |  189 |  2681 |      2252 |
+| groups   |   70 |    0 |     0 |         0 |
+
+
+** Number of installed packages
+#+begin_src sh :exports results
+matv.py 'pacman -Q$c |wc -l' 'N' '[explict-installed]e,[as-dependencies]d,[orphans]dt,[foreign]m'
+#+end_src
+
+#+results:
+| X | explict-installed | as-dependencies | orphans | foreign |
+| N |               197 |             232 |      11 |       4 |
+
+
+** Package Installed Size Distribution
+We use =matplotlib= to visualize package size distribution.
+
+[[./pkg-sizes.png]]
+
+** Package Dependencies
+We use =graphviz= to visualize package dependencies. Red color nodes represent explict installed packages, Boxed nodes represent package groups.
+
+[[./pkg-deps-20.png]] 
+#+HTML: click <a href="https://github.com/huafengxi/pnotes/raw/master/pacman-analysis/pkg-deps.png">here</a> to see big image.

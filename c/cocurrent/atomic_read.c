@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <stdlirb.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <pthread.h>
 

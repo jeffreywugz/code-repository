@@ -1,0 +1,61 @@
+#+Title: autoconf and automake
+#+options: toc:nil
+
+* Motivation
+ Understand the workflow of =autoconf= and =automake=
+
+* Workflow
+** Simplified Workflow
+  Our target is to generate one or several =Makefile=, two steps involved:
+  + you need to supply one =configure.in= (or =configure.ac=) file which will include target =Makefile= paths list to generate a =configure= script, commonly, each target =Makefile= corresponds to one =Makefile.am= file.
+  + Then you could use =./configure= command to generate the =Makefile= included in =configure.in= from corresponding =Makefile.am=. 
+ 
+The following figure visualize this process:
+#+begin_src dot2 :exports results :file autotools-workflow-simple.png :cmdline -Kdot -Tpng
+digraph G{
+#define file shape=note,color=lightgray,style=filled
+"configure.{in/ac}"[file]; "./configure"[file]; 
+subgraph cluster{
+color=bisque; style=filled;
+"Makefile"[file]; "dir1/Makefile"[file]; "dir2/Makefile"[file]
+}
+"configure.{in/ac}"->"./configure"
+"./configure"->"Makefile"
+"./configure"->"dir1/Makefile"
+"./configure"->"dir2/Makefile"
+}
+#+end_src
+
+#+results:
+[[file:autotools-workflow-simple.png]]
+
+** Full Workflow
+  Normally:
+  + you modify an auto-generated =configure.scan= to get =configure.{in/ac}=.
+  + to generate =configure= script, you need to generate =aclocal.m4= first.
+The follw figure shows the full workflow:
+#+begin_src dot2 :exports results :file autotools-workflow.png :cmdline -Kdot -Tpng
+#define cmd shape=box,color=olivedrab,style=filled
+#define file shape=note,color=aquamarine,style=filled
+digraph{
+//rankdir=LR;
+autoscan[cmd]; aclocal[cmd]; autoconf[cmd]; automake[cmd];
+"source tree"[shape=folder];
+"configure.scan"[file]; "configure.{in/ac}"[file,color=red]; "aclocal.m4"[file]; "Makefile.am"[file,color=red]; "Makefile.in"[file]; Makefile[file];
+
+"source tree"->autoscan->"configure.scan";
+"configure.scan"->edit->"configure.{in/ac}";
+"configure.{in/ac}"->autoconf;
+"configure.{in/ac}"->aclocal->"aclocal.m4";
+"aclocal.m4"->autoconf;
+"Makefile.am"->automake->"Makefile.in";
+"configure.{in/ac}"->automake;
+"configure.{in/ac}"->"Makefile.in";
+autoconf->"./configure";
+"Makefile.in"->"./configure"->Makefile;
+}
+#+end_src
+
+#+results:
+[[file:autotools-workflow.png]]
+

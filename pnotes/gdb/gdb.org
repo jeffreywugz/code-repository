@@ -1,0 +1,141 @@
+#+Title: gdb的用法示例
+
+我先把不那么常见的用法的示例给出，常见的用法放在后面，只是作为备忘。
+* 不那么常见的用法
+** 使用gdb script做初始化工作
+#+begin_src sh
+(gdb) source a.gdb
+#+end_src
+gdb启动时会在当前目录查找.gdbinit, 所以我们如果需要反复调试同一个程序，可以在把设置参数，设置断点等命令都放在.gdbinit中
+
+** gdb添加源代码搜索路径
+   如果不是在编译目录调试(比如把可执行文件拷贝到了另一台机器，或者从rpm包中安装的可执行文件)，这条命令就很有用。
+#+begin_src sh
+(gdb) dir ~/src
+#+end_src
+
+** 通过一条shell命令调用正在运行的进程中的一个函数
+   可以用来在脚本中使用，用来查看或改变进程状态,
+如果你想临时监控程序的状态，但是又不愿意新增代码，用gdb查看进程状态便是较好的选择。
+如果你想实验程序在不同的配置下的性能表现，
+但是又不愿意新加配置项(因为新加配置项通常意味着要新增解析配置文件内容或命令行参数的代码)，那么用gdb改变程序中的某个变量值就非常有用。
+#+begin_src sh
+gdb --batch --eval-command='p fib(10)' --pid=`pgrep a.out`
+#+end_src
+
+* 常见用法
+** 准备工作
+   + 准备一个c程序 a.c
+   bash# cat a.c
+#+INCLUDE: "a.c" src c
+
+   + 编译
+#+begin_src sh
+gcc a.c -g --std=c99 -lpthread
+#+end_src
+   + 运行
+#+begin_src sh
+gdb a.out
+gdb> run
+或者
+./a.out
+gdb a.out `pgrep -u $USER -f '^./a.out'`
+#+end_src
+
+** 查看线程
+#+begin_src sh
+(gdb) info thread
+  Id   Target Id         Frame
+  3    Thread 0x2aaaab674700 (LWP 26684) "a.out" 0x00002aaaaacdc18d in pause () from /lib/libpthread.so.0
+  2    Thread 0x2aaaab473700 (LWP 26683) "a.out" 0x00002aaaaacdc18d in pause () from /lib/libpthread.so.0
+* 1    Thread 0x2aaaab272060 (LWP 26680) "a.out" 0x00002aaaaacd5fff in pthread_join () from /lib/libpthread.so.0
+(gdb) thread apply all bt
+
+Thread 3 (Thread 0x2aaaab674700 (LWP 26684)):
+#0  0x00002aaaaacdc18d in pause () from /lib/libpthread.so.0
+#1  0x0000000000400694 in paused_core ()
+#2  0x00002aaaaacd4df0 in start_thread () from /lib/libpthread.so.0
+#3  0x00002aaaaafbe39d in clone () from /lib/libc.so.6
+#4  0x0000000000000000 in ?? ()
+
+Thread 2 (Thread 0x2aaaab473700 (LWP 26683)):
+#0  0x00002aaaaacdc18d in pause () from /lib/libpthread.so.0
+#1  0x00000000004006fd in run_fib_loop ()
+#2  0x00002aaaaacd4df0 in start_thread () from /lib/libpthread.so.0
+#3  0x00002aaaaafbe39d in clone () from /lib/libc.so.6
+#4  0x0000000000000000 in ?? ()
+
+Thread 1 (Thread 0x2aaaab272060 (LWP 26680)):
+#0  0x00002aaaaacd5fff in pthread_join () from /lib/libpthread.so.0
+#1  0x00000000004007ab in main ()
+#+end_src
+
+** 给线程发送信号
+#+begin_src sh
+(gdb) thread apply 3 signal SIGUSR1
+
+Thread 3 (Thread 0x2aaaab674700 (LWP 26684)):
+Continuing with signal SIGUSR1.
+cat sig:10
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000000000400681 in core ()
+#+end_src
+
+** 调用函数
+#+begin_src sh
+(gdb) p fib(10)
+$2 = 55
+(gdb) call fib(10)
+$3 = 55
+(gdb)
+#+end_src
+
+** 条件断点
+#+begin_src sh
+(gdb) break fib if x==2
+Breakpoint 1 at 0x4006ac: file a.c, line 16.
+(gdb) info break
+Num     Type           Disp Enb Address            What
+1       breakpoint     keep y   0x00000000004006ac in fib at a.c:16
+        stop only if x==2
+gdb) thread apply 2 signal SIGUSR1
+
+Thread 2 (Thread 0x2aaaab473700 (LWP 26740)):
+Continuing with signal SIGUSR1.
+cat sig:10
+fib(0) = 1
+fib(1) = 1
+
+Breakpoint 1, fib (x=2) at a.c:16
+16        if(x < 0)return -1;
+#+end_src
+
+** watch point
+#+begin_src sh
+(gdb) watch g_x
+Hardware watchpoint 1: g_x
+#或者
+(gdb) watch *(int*)(0x00111ffff)
+(gdb) thread apply 2 signal SIGUSR1
+
+Thread 2 (Thread 0x2aaaab473700 (LWP 26754)):
+Continuing with signal SIGUSR1.
+cat sig:10
+Hardware watchpoint 1: g_x
+
+Old value = 0
+New value = 1
+0x000000000040071e in run_fib_loop () at a.c:27
+27          printf("fib(%d) = %d\n", i, g_x=fib(i));
+#+end_src
+
+** no-stop mode
+  调试多线程程序有用， 可以暂停一个线程，让别的线程继续正常工作。这些设置必须在启动程序之前设置。
+#+begin_src sh
+(gdb) set target-async on
+(gdb) set pagination off
+(gdb) set non-stop on
+#+end_src
+
+

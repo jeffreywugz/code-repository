@@ -1,0 +1,19 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define CODE_SEGMENT 0x08
+#define DATA_SEGMENT 0x10
+#define STACK_SEGMENT 0x10
+#define USER_CODE_SEGMENT 0x1b
+#define USER_DATA_SEGMENT 0x23
+#define USER_STACK_SEGMENT 0x23
+#define TSS 0x28
+#define KSTACK_SIZE 0x1000
+#define STACK_SIZE 0x1000
+#define LOAD_PHY_ADDR 0x100000
+#define LOAD_OFFSET 0xc0000000
+#define LOAD_USR_PHY_ADDR 0x8000000
+
+#define HZ 100
+
+#endif //CONFIG_H

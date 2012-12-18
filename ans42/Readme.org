@@ -1,0 +1,7 @@
+*ans42* is short for *answer 42*. After ask google `the answer to life the universe and everything`, you will know the *answer*.
+*This project is just a toy*
+
+* ans42 will have 3 layers:
+ + =HAL=: abstract =cpu state=, =interupt=, =memory map=, =io=.
+ + =kernel=: support =task management=, =virtual memory management=.
+ + =sys call=: support =file system=, =device driver frame work=, =system call=.

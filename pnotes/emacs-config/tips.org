@@ -1,0 +1,52 @@
+#+Title: Tips on Managing Emacs Config Files
+
+* Handle Complex Configurations
+** =.emacs.d/init.el= and =version control=
+  When you split your config code into several files under the directory =.emacs.d/=, 
+  you may leave an =.emacs= file alone outside this =.emacs.d/= directory which is not friendly to =version control= tools.
+  Actually, you can replace =.emacs= with =.emacs.d/init.el=.
+
+** Add several =load-path= using one line code
+#+begin_src elisp
+(nconc load-path (mapcar (lambda (p) (concat "~/.emacs.d/" p))
+                         (split-string "/ pkgs pkgs2 pkgs2/color-theme pkgs2/yasnippet pkgs2/auctex pkgs2/nxhtml")))
+#+end_src
+
+** Structure your config file cleaner
++ First cluster your config code into several categories, such as =ui=, =edit=, =tools=, =dev=, =doc=. All config code of one category goes into one file.
+  I will give an outline of =dev= file as an example:
+#+begin_src elsip
+...
+(defun init-dev-misc () ...)
+(defun init-make () ...)
+(defun init-gdb () ...)
+
+(defun init-asm () ...)
+(defun init-cc () ...)
+(defun init-python () ...)
+(defun init-lua () ...)
+(defun init-scheme () ...)
+(defun init-web ()
+
+(provide 'dev)
+#+end_src
+Instead of place =init= code in file scope, I place them in several =init= functions. 
+This makes code more readable and gives me more flexibility over controlling how to initialize emacs shown below.
+
++ Then, you can use follwing code to control which =init= functions need to be called.
+#+begin_src elisp
+(setq init-spec 
+'((ui ui-visual ui-interactive)
+(edit edit-basic edit-key-binding abbrev outline yasnippet)
+(tools env-vars eshell tramp dired)
+(dev dev-misc make gdb !asm cc python !lua !scheme !web)
+(doc !txt2tag auctex ispell org !gnuplot ascii-doc)))
+
+(defun init-may-be (x) (if (not (string-match "^!"  x)) (funcall (intern (concat "init-" x)))))
+(defun init-module (pkg &rest funcs)  (require pkg) (mapcar (lambda (func) (init-may-be (symbol-name func))) funcs))
+(defun init-all (spec) (mapcar (lambda (x) (apply 'init-module x)) spec))
+(init-all init-spec)
+#+end_src
+As you see, =init-spec= list all config file and =init= functions defined there. If you want to disable some =init= functions, just add a =!= before their names.
+  
+If you are interest, here is my [[https://github.com/huafengxi/emacs.d][.emacs.d]]

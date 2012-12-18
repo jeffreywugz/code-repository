@@ -1,0 +1,27 @@
+\documentclass[]{beamer}
+\usepackage{outline}
+\tracingmacros=1
+
+\begin{document}
+\beginoutline[sectioned/framed]
+\i=. section1
+\i==. frame1 \s/blocked/itemed:
+\par this text is introduction
+\i*. block1
+\par block intro
+\i**. items
+\i*. block2
+
+\i==. frame2 \s/columned/itemed:
+\i*. [.3]col1
+\par intro
+\i**. item1
+\i**. item2
+\i*. col2
+
+\i=. section2
+\i*. frame3
+\i**. items
+\i**. items
+\endoutline
+\end{document}
