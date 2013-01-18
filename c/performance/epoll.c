@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
 #include <sys/time.h>
@@ -15,7 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-
+#define cfgi(k, v) atoll(getenv(k)?:v)
 #define error(...) { fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }
 int64_t get_usec()
 {
@@ -24,6 +25,13 @@ int64_t get_usec()
   return time_val.tv_sec*1000000 + time_val.tv_usec;
 }
 
+#define DEFAULT_PKT_SIZE "102400"
+typedef struct Packet
+{
+  int64_t send_ts;
+  int64_t recv_ts;
+  char buf[1024*1000];
+} Packet;
 #define profile(expr) ({                        \
   int64_t old_us = 0;                                  \
   int64_t new_us = 0;                                  \
@@ -91,12 +99,35 @@ static int rm_fd_from_epoll(int efd, int fd)
 {
   int err = 0;
   struct epoll_event event;
+  printf("rm fd[%d]\n", fd);
   if (0 != epoll_ctl(efd, EPOLL_CTL_DEL, fd, &event))
   {
     err = -errno;
     perror("epoll_ctl(del)");
   }
   return err;
+}
+
+ssize_t read_fd(int fd, char* buf, ssize_t total)
+{
+  ssize_t count = 0;
+  ssize_t read_size = 0;
+  while(read_size < total && (count = read(fd, buf + read_size, total - read_size)) > 0)
+  {
+    read_size += count;
+  }
+  return read_size;
+}
+
+ssize_t write_fd(int fd, char* buf, ssize_t total)
+{
+  ssize_t count = 0;
+  ssize_t write_size = 0;
+  while(write_size < total && (count = write(fd, buf + write_size, total - write_size)) > 0)
+  {
+    write_size += count;
+  }
+  return write_size;
 }
 
 typedef int (*epoll_event_handler_t)(void* self, int efd, int sfd, int fd, uint32_t session_id, uint32_t events);
@@ -151,7 +182,7 @@ int run_server(int type, in_addr_t ip, int port, epoll_event_handler_t handler, 
     err = -errno;
     error("listen()=>%s", strerror(errno));
   }
-  else if (0 != (err = add_fd_to_epoll(efd, sfd, EPOLLIN | EPOLLET, 0)))
+  else if (0 != (err = add_fd_to_epoll(efd, sfd, EPOLLIN, 0)))
   {
     error("add_fd_to_epoll()=>%s", strerror(errno));
   }
@@ -169,6 +200,84 @@ int run_server(int type, in_addr_t ip, int port, epoll_event_handler_t handler, 
   return err;
 }
 
+int set_tcp_opt(int fd)
+{
+  int err = 0;
+  int quickAckInt = 1;
+  int noDelayInt = 1;
+  err = setsockopt(fd, IPPROTO_TCP, TCP_QUICKACK,
+                   (const void *)(&quickAckInt), sizeof(quickAckInt));
+  err = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,
+                   (const void *)(&noDelayInt), sizeof(noDelayInt));
+  return err;
+}
+
+int run_server2(int type, in_addr_t ip, int port, void* arg, int64_t timeout_us)
+{
+  int err = 0;
+  int sfd = 0;
+  int fd = 0;
+  ssize_t count = 0;
+  Packet packet;
+  ssize_t pkt_size = cfgi("pkt_size", DEFAULT_PKT_SIZE);
+  if ((sfd = make_inet_socket(type, ip, port)) <= 0)
+  {
+    err = -errno;
+    error("make_inet_socket()=>%s", strerror(errno));
+  }
+  else if (0 != set_tcp_opt(sfd))
+  {
+    error("set_tcp_opt(%d)=>%s", sfd, strerror(errno));
+  }
+  else if (SOCK_STREAM == type && 0 != (err = listen(sfd, SOMAXCONN)))
+  {
+    err = -errno;
+    error("listen()=>%s", strerror(errno));
+  }
+    
+  while(0 == err)
+  {
+    if ((fd= accept(sfd, NULL, NULL)) < 0)
+    {
+      error("accept()=>%s", strerror(errno));
+    }
+    else
+    {
+      while(0 == err)
+      {
+        if (read_fd(fd, (char*)&packet, pkt_size) < pkt_size)
+        {
+          err = -errno;
+          perror ("read_req");
+        }
+        else
+        {
+          packet.recv_ts = get_usec();
+          if (write_fd(fd, (char*)&packet, pkt_size) < pkt_size)
+          {
+            err = -errno;
+            perror("write_response:");
+          }
+          printf("receive<%ld:%ld>:%ld,err=%d\n", packet.send_ts, packet.recv_ts, packet.recv_ts - packet.send_ts, err);
+        }
+      }
+      if (0 != close(fd))
+      {
+        err = -errno;
+        perror("close");
+      }
+      else
+      {
+        //err = 0;
+      }
+    }
+  }
+
+  if (sfd > 0)
+    close(sfd);
+  return err;
+}
+
 int handle_tcp_socket_event(void* self, int efd, int sfd, int fd, uint32_t session_id, uint32_t events)
 {
   int err = 0;
@@ -177,6 +286,7 @@ int handle_tcp_socket_event(void* self, int efd, int sfd, int fd, uint32_t sessi
   int infd = 0;
   ssize_t count = 0;
   char buf[512];
+  Packet packet;
   //fprintf(stderr, "handle event [%d]!\n", events);
   if (events & EPOLLERR)
   {
@@ -211,26 +321,24 @@ int handle_tcp_socket_event(void* self, int efd, int sfd, int fd, uint32_t sessi
     else
     {
       //fprintf(stderr, "handle read\n");
-      while (0 == err)
+      count = read_fd(fd, (char*)&packet, sizeof(packet));
+      if (count < sizeof(packet))
       {
-        count = read(fd, buf, sizeof(buf));
-        if (count < 0)
-        {
-          err = -errno;
-          if (EAGAIN != errno && EWOULDBLOCK != errno)
-            perror ("read");
-        }
-        else if (count == 0)
-        {
-          break;
-        }
-        else
-        {
-          printf("%ld %s\n", count, buf);
-        }
+        err = -errno;
+        if (EAGAIN != errno && EWOULDBLOCK != errno)
+          perror ("read");
+      }
+      else
+      {
+        packet.recv_ts = get_usec();
+        while(0 > write(fd, (char*)&packet, sizeof(packet)) && errno == EAGAIN)
+          ;
+        err = (errno == EAGAIN)?0:-errno;
+        perror("write_response:");
+        printf("receive<%ld:%ld>:%ld,err=%d\n", packet.send_ts, packet.recv_ts, packet.recv_ts - packet.send_ts, err);
       }
       //printf("read(count=%ld)=>%d\n", count, err);
-      if (count != 0 && -EAGAIN == err)
+      if (0 == err)
       {}
       else if (0 != (err = rm_fd_from_epoll(efd, fd)))
       {
@@ -263,11 +371,27 @@ int watch_counter(volatile int64_t* counter, int64_t interval_us, int64_t durati
   return 0;
 }
 
+
+struct ClientCfg
+{
+  in_addr_t ip_;
+  int port_;
+  volatile int64_t stop_;
+  volatile int64_t npkts_send_;
+  volatile int64_t total_time_;
+};
+struct ClientCfg client_cfg;
+
 int run_client(int type, in_addr_t ip, int port, int64_t id, volatile int64_t* stop, volatile int64_t* npkts_send)
 {
   int err = 0;
   char id_buf[16];
   int fd = 0;
+  Packet packet;
+  ssize_t pkt_size = cfgi("pkt_size", DEFAULT_PKT_SIZE);
+  int64_t cur_ts = 0;
+  int64_t send_ts = 0;
+  int64_t client_wait_us = cfgi("client_wait_us", "100000");
   struct sockaddr_in sin;
   sin.sin_port = htons(port);
   sin.sin_addr.s_addr = ip;
@@ -286,6 +410,10 @@ int run_client(int type, in_addr_t ip, int port, int64_t id, volatile int64_t* s
     perror("socket");
     err = -errno;
   }
+  else if (0 != set_tcp_opt(fd))
+  {
+    error("set_tcp_opt(%d)=>%s", fd, strerror(errno));
+  }
   else if (0 != (connect(fd, (struct sockaddr *)&sin, sizeof(sin))))
   {
     perror("connect");
@@ -293,12 +421,31 @@ int run_client(int type, in_addr_t ip, int port, int64_t id, volatile int64_t* s
   }
   for(int64_t i = 0; !*stop && 0 == err; i++)
   {
-    if (0 >= (write(fd, id_buf, strlen(id_buf) + 1)))
+    send_ts = get_usec();
+    packet.send_ts = send_ts;
+    if (write_fd(fd, (char*)&packet, pkt_size) < pkt_size)
     {
-      perror("write");
+      perror("write_req");
       err = -errno;
     }
+    else if (read_fd(fd, (char*)&packet, pkt_size) < pkt_size)
+    {
+      perror("read_response");
+      break;
+    }
+    else
+    {
+      cur_ts = get_usec();
+      if (send_ts != packet.send_ts)
+      {
+        printf("packet.send_ts[%ld] != send_ts[%ld]\n", packet.send_ts, send_ts);
+      }
+      client_cfg.total_time_ += cur_ts - packet.send_ts;
+      printf("client<%ld:%ld:%ld>:%ld:%ld\n", packet.send_ts, packet.recv_ts, cur_ts,
+             packet.recv_ts - packet.send_ts, cur_ts - packet.send_ts);
+    }
     __sync_fetch_and_add(npkts_send, 1);
+    usleep(client_wait_us);
     //printf("client(i=%ld, id=%ld, packets=%ld)=>%d\n", i, id, n_packets, err);
   }
   if (fd > 0 && 0 != (close(fd)))
@@ -313,30 +460,26 @@ int test_server(in_addr_t ip, int port)
 {
   int64_t timeout_us = 10*1000;
   printf("server(port=%d)\n", port);
-  return run_server(SOCK_STREAM, ip, port, handle_tcp_socket_event, NULL, timeout_us);
+  return run_server2(SOCK_STREAM, ip, port, NULL, timeout_us);
 }
-
-struct ClientCfg
-{
-  in_addr_t ip_;
-  int port_;
-  volatile int64_t stop_;
-  volatile int64_t npkts_send_;
-};
 
 int launch_client(struct ClientCfg* cfg)
 {
   return run_client(SOCK_STREAM, cfg->ip_, cfg->port_, 0, &cfg->stop_, &cfg->npkts_send_);
 }
 
-int test_client(in_addr_t ip, int port, const int64_t n_conn, int64_t n_packets)
+int test_client(in_addr_t ip, int port, const int64_t n_conn)
 {
   int err = 0;
+  int64_t duration = cfgi("duration", "1000000");
   pthread_t threads[n_conn];
   struct in_addr addr;
   addr.s_addr = ip;
-  struct ClientCfg client_cfg = {ip, port, 0, 0};
-  printf("client(addr=%s:%d, n_conn=%ld, n_packets=%ld)\n", inet_ntoa(addr), port, n_conn, n_packets);
+  client_cfg.ip_ = ip;
+  client_cfg.port_ = port;
+  client_cfg.npkts_send_ = 0;
+  client_cfg.total_time_ = 0;
+  printf("client(addr=%s:%d, n_conn=%ld, duration=%ld)\n", inet_ntoa(addr), port, n_conn, duration);
   for(int64_t i = 0; 0 == err && i < n_conn; i++)
   {
     if (0 != (pthread_create(threads + i, NULL, launch_client, &client_cfg)))
@@ -347,8 +490,10 @@ int test_client(in_addr_t ip, int port, const int64_t n_conn, int64_t n_packets)
   }
   if (0 == err)
   {
-    watch_counter(&client_cfg.npkts_send_, 1000000, 30000000, "pkts");
+    watch_counter(&client_cfg.npkts_send_, 1000000, duration, "pkts");
     client_cfg.stop_ = 1;
+    printf("avg_latency: %ld/%ld=%ld\n", client_cfg.total_time_, client_cfg.npkts_send_,
+           client_cfg.npkts_send_? client_cfg.total_time_/client_cfg.npkts_send_:0);
   }
   for(int64_t i = 0; 0 == err && i < n_conn; i++)
   {
@@ -384,12 +529,12 @@ int main(int argc, char **argv)
   }
   else if (0 == strcmp(argv[1], "client"))
   {
-    if (argc != 6)
+    if (argc != 5)
     {
       err = -EINVAL;
       show_help = true;
     }
-    else if (0 != (err = test_client(inet_addr(argv[2]), atoi(argv[3]), atoll(argv[4]), atoll(argv[5]))))
+    else if (0 != (err = test_client(inet_addr(argv[2]), atoi(argv[3]), atoll(argv[4]))))
     {
       error("test_client(%s:%s)=>%d", argv[2], argv[3]);
     }
@@ -401,7 +546,7 @@ int main(int argc, char **argv)
   }
   if (show_help)
   {
-    fprintf(stderr, "Usage:\n\t%1$s server ip port\n" "\t%1$s client ip port n_conn n_packet\n", argv[0]);
+    fprintf(stderr, "Usage:\n\t%1$s server ip port\n" "\t%1$s client ip port n_conn\n", argv[0]);
   }
 
   return 0;
