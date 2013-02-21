@@ -1,4 +1,4 @@
-target = atomic_add
+target = static-var
 cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99

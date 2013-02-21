@@ -1,10 +1,10 @@
-target = mac
+target = cpu-mem-limit
 cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99
 cxxflags = -lpthread
 
-all: mac.run
+all: $(target).run
 %.run: %.exe
 	./$< $(args)
 %.exe: %.c

@@ -4,6 +4,9 @@ volatile修饰符的作用有两个：
 2. 保证编译器不会交换volatile变量的读写操作；
 这两点对编写正确的多线程程序是很重要的，但是volatile修饰符不保证memory barrier，
 因此即使用了volatile变量，CPU的乱序执行依然可能带来问题。
+不仅如此，volatile变量甚至不能保证编译器不交换volatile变量和非volatile变量的访问顺序。
+http://www.goldendoc.org/2012/01/optimization-barrier/
+http://en.wikipedia.org/wiki/Memory_barrier
 
 特别值得注意的是当我们使用 =pthread_mutex= 时，每次加锁解锁都对应着一次memory barrier。
 所以当我们把 =pthread_mutex= 换成CAS原子操作实现的spin lock时，可能会暴露新的问题。

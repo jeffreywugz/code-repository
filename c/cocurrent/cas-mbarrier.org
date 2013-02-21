@@ -1,0 +1,7 @@
+
+On x86, it will turn into a lock prefixed assembly instruction, like LOCK XADD.
+Being a single instruction, it is non-interruptible. As an added "feauture",
+ the lock prefix results in a full memory barrier:
+A memory barrier is in fact implemented as a dummy LOCK OR or LOCK AND in both the .NET and the JAVA JIT on x86/x64.
+So you have a full fence on x86 as an added bonus, whether you like it or not. :)
+http://stackoverflow.com/questions/2599238/are-memory-barriers-necessary-for-atomic-reference-counting-shared-immutable-dat
