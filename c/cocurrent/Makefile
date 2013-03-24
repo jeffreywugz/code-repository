@@ -1,11 +1,11 @@
-target = static-var
+target = data-dependency-barrier
 cc = gcc
 cxx = g++
-cflags = -lpthread -std=c99
+cflags = -lpthread -g
 cxxflags = -lpthread
 all: $(target).test
 %.test: %.exe
-	./$<
+	./$< 1024000 1 2
 %.exe: %.c
 	$(cc) $(cflags) -o $@ $^
 %.exe: %.cpp

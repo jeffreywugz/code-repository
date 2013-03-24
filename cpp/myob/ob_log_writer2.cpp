@@ -14,13 +14,11 @@
 
 #include "ob_log_writer2.h"
 
-using namespace oceanbase::common;
-
 namespace oceanbase
 {
-  namespace updateserver
+  namespace common
   {
-    ObLogWriterV2::ObLogWriterV2(): log_dir_(NULL), file_(), dio_(true), log_sync_type_(OB_LOG_SYNC)
+    ObLogWriterV2::ObLogWriterV2(): log_dir_(NULL), file_(), dio_(true), align_mask_(0), log_sync_type_(OB_LOG_SYNC)
     {
     }
 
@@ -59,7 +57,7 @@ namespace oceanbase
       return err;
     }
 
-    int ObLogWriterV2::init(const char* log_dir, int64_t log_sync_type)
+    int ObLogWriterV2::init(const char* log_dir, const int64_t align_mask, int64_t log_sync_type)
     {
       int err = OB_SUCCESS;
 
@@ -68,17 +66,18 @@ namespace oceanbase
         err = OB_INIT_TWICE;
         TBSYS_LOG(ERROR, "init twice");
       }
-      else if (NULL == log_dir)
+      else if (NULL == log_dir || (align_mask & (align_mask + 1)))
       {
         err = OB_INVALID_ARGUMENT;
-        TBSYS_LOG(ERROR, "Parameter are invalid[log_dir=%p]", log_dir);
+        TBSYS_LOG(ERROR, "Parameter are invalid[log_dir=%p, align_mask=%ld]", log_dir, align_mask);
       }
       else if (NULL == (log_dir_ = strndup(log_dir, OB_MAX_FILE_NAME_LENGTH)))
       {
-        TBSYS_LOG(ERROR, "strdup()=>NULL", log_dir);
+        TBSYS_LOG(ERROR, "strdup()=>NULL, log_dir=%s", log_dir);
       }
       else
       {
+        align_mask_ = align_mask;
         log_sync_type_ = log_sync_type;
       }
 
@@ -103,6 +102,61 @@ namespace oceanbase
       return err;
     }
 
+    struct linux_dirent {
+      long           d_ino;
+      off_t          d_off;
+      unsigned short d_reclen;
+      char           d_name[];
+    };
+
+    static char* select_first_file_from_dir(char* buf, int64_t limit, const char* dir_name)
+    {
+      char* first = NULL;
+      int64_t nread = 0;
+      int fd = -1;
+      char entbuf[1024];
+      struct linux_dirent *ent = NULL;
+
+      if ((fd = open(dir_name, O_RDONLY | O_DIRECTORY)) < 0)
+      {
+        TBSYS_LOG(ERROR, "opendir(%s) FAIL, %s", dir_name, strerror(errno));
+      }
+      else if ((nread = syscall(SYS_getdents, fd, entbuf, sizeof(entbuf))) < 0)
+      {
+        TBSYS_LOG(ERROR, "getdents(%s) FAIL, %s", dir_name, dir_name);
+      }
+      else if (0 == nread)
+      {
+        TBSYS_LOG(INFO, "dir %s is empty", dir_name);
+      }
+      for (int64_t pos = 0; pos < nread; pos += ent->d_reclen)
+      {
+        ent = (struct linux_dirent*)(entbuf + pos);
+        char d_type = *(entbuf + pos + ent->d_reclen - 1);
+        int64_t len = 0;
+        if (d_type != DT_REG || atoll(ent->d_name) <= 0)
+        {
+          TBSYS_LOG(TRACE, "skip %s", ent->d_name);
+        }
+        else if ((len = snprintf(buf, limit, "%s/%s", dir_name, ent->d_name)) < 0
+                 || len >= limit)
+        {
+          TBSYS_LOG(ERROR, "gen file_name fail(dir=%s, file=%s)", dir_name, ent->d_name);
+          break;
+        }
+        else
+        {
+          first = buf;
+          break;
+        }
+      }
+      if (fd >= 0)
+      {
+        close(fd);
+      }
+      return first;
+    }
+
     static int open_log_file_func(ObFileAppender& file, const char* log_dir, const uint64_t log_file_id,
                                   const bool dio, const bool is_trunc)
     {
@@ -110,21 +164,40 @@ namespace oceanbase
       struct stat file_info;
       int64_t len = 0;
       char file_name[OB_MAX_FILE_NAME_LENGTH];
+      char pool_dir[OB_MAX_FILE_NAME_LENGTH];
+      char pool_file[OB_MAX_FILE_NAME_LENGTH] = "none";
       if (OB_SUCCESS != (err = stat(log_dir, &file_info))
           && OB_SUCCESS != (err = mkdir(log_dir, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)))
       {
         TBSYS_LOG(ERROR, "create \"%s\" directory error[%s]", log_dir, strerror(errno));
       }
       else if ((len = snprintf(file_name, OB_MAX_FILE_NAME_LENGTH, "%s/%lu", log_dir, log_file_id)) <= 0
-               && len >= OB_MAX_FILE_NAME_LENGTH)
+               || len >= OB_MAX_FILE_NAME_LENGTH)
       {
         err = OB_ERROR;
-        TBSYS_LOG(ERROR, "generate_file_name(len=%ld, log_dir=%s, log_file_id=%ld)=>%d", len, log_dir, log_file_id);
+        TBSYS_LOG(ERROR, "generate_file_name(len=%ld, log_dir=%s, log_file_id=%ld)=>%d", len, log_dir, log_file_id, err);
       }
-      else if (OB_SUCCESS != (err = file.open(ObString(strlen(file_name), strlen(file_name), file_name), dio, true, is_trunc)))
+      else if ((len = snprintf(pool_dir, OB_MAX_FILE_NAME_LENGTH, "%s/pool", log_dir)) <= 0
+               || len >= OB_MAX_FILE_NAME_LENGTH)
+      {
+        err = OB_ERROR;
+        TBSYS_LOG(ERROR, "generat_pool_dir_name(%s)=>%d", log_dir, err);
+      }
+      else if (0 != stat(file_name, &file_info)
+               && NULL != select_first_file_from_dir(pool_file, OB_MAX_FILE_NAME_LENGTH, pool_dir)
+               && 0 != rename(pool_file, file_name))
+      {
+        TBSYS_LOG(ERROR, "rename fail[%s->%s], %s", pool_file, file_name, strerror(errno));
+      }
+      if (OB_SUCCESS != err) // rename失败也可以继续
+      {}
+      else if (OB_SUCCESS != (err = file.open(ObString(static_cast<int32_t>(len),
+                                                       static_cast<int32_t>(len), file_name),
+                                              dio, true, is_trunc, OB_DIRECT_IO_ALIGN)))
       {
         TBSYS_LOG(ERROR, "open commit log file[file_name=%s] ret=%d", file_name, err);
       }
+      TBSYS_LOG(INFO, "open_log_file(%s->%s)", pool_file, file_name);
       return err;
     }
 
@@ -160,6 +233,11 @@ namespace oceanbase
         err = OB_ERR_UNEXPECTED;
         TBSYS_LOG(ERROR, "log file is broken");
       }
+      else if (0 != (log_cursor.offset_ & align_mask_))
+      {
+        err = OB_LOG_NOT_ALIGN;
+        TBSYS_LOG(WARN, "start_log(%s): LOG_NOT_ALIGNED", to_cstring(log_cursor));
+      }
       else
       {
         log_cursor_ = log_cursor;
@@ -182,9 +260,13 @@ namespace oceanbase
         {
           TBSYS_LOG(ERROR, "open_log_file(new_file_id=%ld)=>%d", new_file_id, err);
         }
+        else if (OB_SUCCESS != (err = file.reset_file_pos(0)))
+        {
+          TBSYS_LOG(ERROR, "reset_file_pos(0)=>%d", err);
+        }
         else
         {
-          TBSYS_LOG(INFO, "open_log_file(new_file_id=%ld)=>%d", new_file_id, err);
+          TBSYS_LOG(INFO, "open_log_file(new_file_id=%ld)", new_file_id);
         }
       }
       else
@@ -192,7 +274,7 @@ namespace oceanbase
       return err;
     }
 
-    int parse_log_buffer(const char* log_data, int64_t data_len, const ObLogCursor& start_cursor, ObLogCursor& end_cursor)
+    static int parse_log_buffer(const char* log_data, int64_t data_len, const ObLogCursor& start_cursor, ObLogCursor& end_cursor, bool check_data_integrity = false)
     {
       int err = OB_SUCCESS;
       int64_t pos = 0;
@@ -213,7 +295,7 @@ namespace oceanbase
         {
           TBSYS_LOG(ERROR, "log_entry.deserialize(log_data=%p, data_len=%ld, pos=%ld)=>%d", log_data, data_len, pos, err);
         }
-        else if (OB_SUCCESS != (err = log_entry.check_data_integrity(log_data + pos)))
+        else if (check_data_integrity && OB_SUCCESS != (err = log_entry.check_data_integrity(log_data + pos)))
         {
           TBSYS_LOG(ERROR, "log_entry.check_data_integrity()=>%d", err);
         }
@@ -247,7 +329,7 @@ namespace oceanbase
 
       if (OB_SUCCESS != err)
       {
-        hex_dump(log_data, data_len, TBSYS_LOG_LEVEL_WARN);
+        hex_dump(log_data, static_cast<int32_t>(data_len), TBSYS_LOG_LEVEL_WARN);
       }
       return err;
     }
@@ -256,7 +338,12 @@ namespace oceanbase
     {
       int err = OB_SUCCESS;
       ObLogCursor new_cursor;
-      if (OB_SUCCESS != (err = check_state()))
+      if (0 != (data_len % OB_DIRECT_IO_ALIGN))
+      {
+        err = OB_LOG_NOT_ALIGN;
+        TBSYS_LOG(ERROR, "write_log(data_len=%ld): NOT_ALIGN", data_len);
+      }
+      else if (OB_SUCCESS != (err = check_state()))
       {
         TBSYS_LOG(ERROR, "check_inner_stat()=>%d", err);
       }
@@ -266,6 +353,10 @@ namespace oceanbase
       }
       else if (0 == data_len)
       {}
+      else if (0 != (data_len & align_mask_))
+      {
+        TBSYS_LOG(WARN, "buf_len[%ld] not aligned align_mask=%lx", data_len, align_mask_);
+      }
       else if (OB_SUCCESS != (err = parse_log_buffer(log_data, data_len, log_cursor_, new_cursor)))
       {
         TBSYS_LOG(ERROR, "parse_log_buffer(log_data=%p, data_len=%ld, log_cursor=%s)=>%d",
@@ -275,7 +366,7 @@ namespace oceanbase
       {
         TBSYS_LOG(ERROR, "file_.append(log_data=%p, data_len=%ld, sync_type=%ld)=>%d", log_data, data_len, log_sync_type_, err);
       }
-      else if (OB_SUCCESS != (err = open_log_file_maybe_(file_, log_dir_, log_cursor_.file_id_, new_cursor.file_id_, dio_, true)))
+      else if (OB_SUCCESS != (err = open_log_file_maybe_(file_, log_dir_, log_cursor_.file_id_, new_cursor.file_id_, dio_, false)))
       {
         TBSYS_LOG(ERROR, "open_log_file_maybe(old_id=%ld, new_id=%ld)=>%d", log_cursor_.file_id_, new_cursor.file_id_, err);
       }
@@ -309,5 +400,5 @@ namespace oceanbase
       }
       return err;
     }
-  }; // end namespace 
+  }; // end namespace common
 }; // end namespace oceanbase

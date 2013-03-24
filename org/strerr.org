@@ -1,0 +1,3 @@
+
+* why strerror not thread safe?
+因为strerror在遇到未知的errno时，返回的是"unknow error: %d"%(errno)。

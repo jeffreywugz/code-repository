@@ -1,0 +1,7 @@
+char buf[512] __attribute__((aligned(512)));
+这种gcc扩展可以让buf 512自己对齐，但是一个陷阱是
+class A
+{
+static char buf[512] __attribute__((aligned(512)));
+};
+这是不起作用的，因为这里不是定义。

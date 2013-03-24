@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
   }
   if (show_help)
   {
-    fprintf(stderr, "Usages:\n\t%s size", argv[1]);
+    fprintf(stderr, "Usages:\n\t%s size\n", argv[0]);
   }
   return err;
 }

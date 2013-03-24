@@ -5,3 +5,6 @@ Being a single instruction, it is non-interruptible. As an added "feauture",
 A memory barrier is in fact implemented as a dummy LOCK OR or LOCK AND in both the .NET and the JAVA JIT on x86/x64.
 So you have a full fence on x86 as an added bonus, whether you like it or not. :)
 http://stackoverflow.com/questions/2599238/are-memory-barriers-necessary-for-atomic-reference-counting-shared-immutable-dat
+
+下面的网页讲的比较全面:
+http://home.dei.polimi.it/speziale/tech/memory_consistency/mc.html
