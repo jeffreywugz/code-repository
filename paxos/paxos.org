@@ -1,0 +1,36 @@
+#+Title: Paxos Execution Trace Example
+#+Options: toc:nil
+
+* 一个例子
+ 5个Process: A, B, C, D, E, 进行若干轮选举。第5轮Vote，value x被A,B,C选中， 并且假定这是第一次有值被Majority Accept。\\
+ 下面的表格想要说明编号大于5的所有Accept请求都只能请求value x。
+ | 备注                | 消息                | A      | B               | C                  | D                  | E             |
+ |---------------------+---------------------+--------+-----------------+--------------------+--------------------+---------------|
+ | /                   | <>                  | <      |                 |                    |                    | >             |
+ |                     |                     | <c>    | <c>             | <c>                | <c>                | <c>           |
+ |                     | ...                 | ...    | ...             | ...                | ...                | ...           |
+ |---------------------+---------------------+--------+-----------------+--------------------+--------------------+---------------|
+ |                     | $PrepareReq(5)$     | ...    | ...             | ...                | ...                | ...           |
+ | x被选中             | $AcceptReq(5, x)$   | Acc(x) | Acc(x)          | Acc(x)             |                    |               |
+ |---------------------+---------------------+--------+-----------------+--------------------+--------------------+---------------|
+ |                     | $PrepareReq(6)$     |        |                 | *PrepareRes(5, x)* | PrepareRes(.)      | PrepareRes(.) |
+ | 采用C返回的res(5,x) | $AcceptReq(6, y=x)$ |        |                 |                    | Acc(x)             |               |
+ |---------------------+---------------------+--------+-----------------+--------------------+--------------------+---------------|
+ |                     | $PrepareReq(7)$     |        | PrepareRes(5,x) | PrepareRes(5,x)    | *PrepareRes(6, x)* |               |
+ | 采用D返回的res(6,x) | $AcceptReq(7, z=x)$ |        |                 |                    |                    |               |
+
+ 解释如下:
+  1. 考虑第6轮vote， $AcceptReq(6, y)$ 被发出的前提是收集到了Majority的Prepare Response，比如C,D,E, 与A,B,C必有重叠, 在这个特定情况下，C是重叠的Acceptor。
+     C对第6轮的Prepare响应一定在第五轮Accept响应之后，所以C一定会返回第5轮Accept的value x，这样 $AcceptReq(6,y)$ 一定会采用C返回的 $PrepareRes(5,x)$
+  2. 考虑第7轮vote， $AcceptReq(7, z)$ 被发出的前提是收集到了Majority的Prepare Response，比如B,C,D, 与A,B,C必有重叠，那么 $AcceptReq(7,z)$ 用的值不可能是第5轮之前Accept的值，
+     在这个特定的情况下，$AcceptReq(7,z)$ 采用的是D返回的 $PrepareRes(6,x)$
+
+* 数学归纳法
+  考虑所有的 $AcceptReq(i, V_i)$, 如果有 $AcceptReq(m, V_m)$ 第一次被Majority Accept, 只要证明 $j \ge m \to V_j = V_m$ 即可
+
+  用数学归纳法:
+  1. $j = m \to Vj = Vm$ 显然成立
+  2. 假定 $j < k \to V_j = V_m$ 成立，在此基础上证明 $V_k = V_m$ .\\
+     $AcceptReq(k, V_k)$ 发出的前提是收到了Majority Acceptor的 $PrepareRes(x_i,V_{x_i})$, 容易证明 $m \le max(x_i) < k$, 所以 $V_{max(x_i)} = Vm$
+
+

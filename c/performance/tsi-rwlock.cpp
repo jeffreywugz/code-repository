@@ -34,13 +34,13 @@ struct RWLock
     {
       if (0 == write_uid_)
       {
-        ref++;
+        (*ref)++;
         __sync_synchronize();
         if (0 == write_uid_)
         {
           break;
         }
-        ref--;
+        (*ref)--;
       }
       PAUSE();
     }

@@ -3,18 +3,19 @@ cc = gcc
 cflags = -lpthread -lrt -std=c99 -g -O2 -D_GNU_SOURCE
 sshpass=~/work/bin/sshpass -f root.pass
 #remote-host=root@my163071.cm6
-remote-host=root@172.24.131.193
+remote-host=root@10.13.249.192
 remote-dir=/data/log1
-all: blktrace.sda.png blktrace.sdb.png
+all: disk-latency.log
 help:
 	vfiles.py *.png
+disk-latency.log: disk-latency.exe
+	time_limit=5000000 ./disk-latency.exe $(disk-latency.args)
 rsync:
-	$(sshpass) rsync -avz disk-latency.exe run-blktrace.sh $(remote-host):$(remote-dir)
-disk-latency.log blktrace.sda.log blktrace.sdb.log: disk-latency.exe rsync
-	#$(sshpass) ssh $(remote-host) 'cd $(remote-dir); ./run-blktrace.sh'
-	$(sshpass) rsync -av $(remote-host):$(remote-dir)/disk-latency.log .
-	$(sshpass) rsync -av $(remote-host):$(remote-dir)/blktrace.sda.log .
-	$(sshpass) rsync -av $(remote-host):$(remote-dir)/blktrace.sdb.log .
+	$(sshpass) rsync -avz disk-latency.exe run-blktrace.sh run-disk-latency.sh $(remote-host):$(remote-dir)
+# disk-latency.log blktrace.sdb.log: disk-latency.exe rsync
+# 	$(sshpass) ssh $(remote-host) 'cd $(remote-dir); ./run-blktrace.sh'
+# 	$(sshpass) rsync -av $(remote-host):$(remote-dir)/disk-latency.log .
+# 	$(sshpass) rsync -av $(remote-host):$(remote-dir)/blktrace.sdb1.log blktrace.sdb.log
 disk-latency.tab: disk-latency.log
 	~/ob.dev/tools/deploy/b/findall.py ':$${latency:int:\d+}$$' < $< > $@
 blktrace.%.tab: blktrace.%.log

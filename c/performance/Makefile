@@ -1,4 +1,4 @@
-target = tsi-rwlock
+target = cas_inc_seq
 tsi-rwlock.args= 2 1000
 cas128.args = 2 1000
 gettsi.args = 2 1000
@@ -21,7 +21,8 @@ gcc-opt.args =
 cc = gcc
 cxx = g++
 cflags = -lpthread -lrt -std=c99 -g -O2 -D_GNU_SOURCE
-cxxflags = -g -O2 -lpthread -lrt -Wall
+cxxflags = -g -lpthread -lrt -Wall -fno-strict-aliasing
+#cxxflags = -g -O2 -lpthread -lrt -Wall
 
 all: $(target).run
 disk-latency.report: remote-host=172.24.131.194

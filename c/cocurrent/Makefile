@@ -1,4 +1,4 @@
-target = data-dependency-barrier
+target = builtin-128bit
 cc = gcc
 cxx = g++
 cflags = -lpthread -g
