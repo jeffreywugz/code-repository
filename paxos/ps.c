@@ -26,6 +26,7 @@ void print_compile_info()
   fprintf(stderr, "compiled by GCC %s at %s %s\n"
           "%s update at %s\n",
           __VERSION__, __DATE__, __TIME__,  __BASE_FILE__, __TIMESTAMP__);
+  fprintf();
 }
 int main()
 {
