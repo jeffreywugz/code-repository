@@ -6,7 +6,7 @@ ldflags=
 .PHONY: all run etags clean dep bak
 
 srcs=$(wildcard *.c)
-objs=$(patsubst %.c,%.o,$(srcs))
+objs=$(patsubst %.c,%.o,$(srcs)) $(target).src.o
 
 all: $(target) run
 $(target): $(objs)
@@ -15,6 +15,10 @@ $(target): $(objs)
 	$(cc) -c  $(cflags) $<
 run: $(target)
 	./$(target)
+$(target).tar.bz2: $(srcs) Makefile
+	tar jcf $@ $^
+$(target).src.o: $(target).tar.bz2
+	ld -r -b binary -o $@ $< # objcopy -B i386 -I binary -O elf64-x86-64 $< $@
 etags:
 	etags.emacs `find . -type f -name "*.[ch]"`
 clean:

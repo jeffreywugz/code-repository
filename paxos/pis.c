@@ -29,15 +29,14 @@ struct pis_t
 
 pis_t* pis_new(pis_callback_t* callback)
 {
-  int err = 0;
   pis_t* pis = NULL;
   if (NULL == callback)
   {
-    err = -EINVAL;
+    //err = -EINVAL;
   }
   else if (NULL == (pis = malloc(sizeof(pis_t))))
   {
-    err = -ENOMEM;
+    //err = -ENOMEM;
   }
   else
   {
