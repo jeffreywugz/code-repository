@@ -147,7 +147,10 @@ int64_t test_disk_latency(const char* path, int64_t sleep_us, int64_t write_size
     cur_end_time = get_usec();
     //printf("write: time=<%ld:%ld>:%ld\n", cur_start_time, cur_end_time, cur_end_time-cur_start_time);
     exp_stat_add(&stat, cur_end_time - cur_start_time);
-    usleep(sleep_us);
+    if (sleep_us > 0)
+    {
+      usleep(sleep_us);
+    }
   }
   exp_stat_report(&stat);
   return err;

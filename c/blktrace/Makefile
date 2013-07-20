@@ -16,7 +16,7 @@ io-stress.log: io-stress.exe
 disk-latency.log: disk-latency.exe
 	time_limit=5000000 ./disk-latency.exe $(disk-latency.args)
 rsync:
-	$(sshpass) rsync -avz disk-latency.exe run-blktrace.sh run-disk-latency.sh $(remote-host):$(remote-dir)
+	$(sshpass) rsync -avz io-stress.exe run-io-stress.sh disk-latency.exe run-blktrace.sh run-disk-latency.sh $(remote-host):$(remote-dir)
 # disk-latency.log blktrace.sdb.log: disk-latency.exe rsync
 # 	$(sshpass) ssh $(remote-host) 'cd $(remote-dir); ./run-blktrace.sh'
 # 	$(sshpass) rsync -av $(remote-host):$(remote-dir)/disk-latency.log .
