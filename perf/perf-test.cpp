@@ -107,6 +107,22 @@ class MemcpyCallable: public OneLoopCallable
     char* dest_;
 };
 
+class GetUsCallable: public OneLoopCallable
+{
+  public:
+    GetUsCallable(){}
+    ~GetUsCallable(){}
+  public:
+    int do_once(int64_t idx) {
+      struct timeval time_val;
+      gettimeofday(&time_val, NULL);
+      last_time_ = time_val.tv_sec*1000000 + time_val.tv_usec;
+      return 0;
+    }
+  private:
+    int64_t last_time_;
+};
+
 #include "fast-spinlock.h"
 class FastSpinLockCallable: public OneLoopCallable
 {
@@ -192,6 +208,10 @@ class Perf
       Cas128Callable callable;
       return profile(&callable);
     }
+    int getus() {
+      GetUsCallable callable;
+      return profile(&callable);
+    }
 };
 #include "cmd_args_parser.h"
 #define report_error(err, ...) if (0 != err)fprintf(stderr, __VA_ARGS__);
@@ -200,12 +220,12 @@ const char* _usages = "Usages:\n"
   "\t%1$s mutex\n"
   "\t%1$s spinlock\n"
   "\t%1$s tsi\n"
-  "\t%1$s memcpy block_size\n"
   "\t%1$s add\n"
   "\t%1$s cas\n"
   "\t%1$s memcpy block_size n_block\n"
   "\t%1$s fastspinlock\n"
-  "\t%1$s cas128\n";
+  "\t%1$s cas128\n"
+  "\t%1$s getus\n";
 
 int main(int argc, char** argv)
 {
@@ -243,6 +263,10 @@ int main(int argc, char** argv)
   else if (-EAGAIN != (err = CmdCall(argc, argv, perf.cas128):-EAGAIN))
   {
     report_error(err, "cas128()=>%d", err);
+  }
+  else if (-EAGAIN != (err = CmdCall(argc, argv, perf.getus):-EAGAIN))
+  {
+    report_error(err, "getus()=>%d", err);
   }
   else
   {

@@ -1,0 +1,13 @@
+#+Title: VR
+
+本地需要记录的状态:
+1. epoch number
+2. view number
+3. old group
+4. new group
+5. commited log id
+
+log writer要提供的接口:
+#+BEGIN_SRC cpp
+class ObLogWriter
+#+END_SRC
