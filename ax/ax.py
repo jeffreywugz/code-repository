@@ -41,22 +41,46 @@ class AxHandler:
     def handle_packet(self, pkt):
         pass
 
+class Config:
+    default_value = dict(
+        self_addr = ('127.0.0.1', 8042),
+    )
+    def __init__(self, path):
+        cfg = load_file(path)
+        self.path = path
+        self.cfg = {k:cfg.get(k, v) for k, v in Config.default_value.items()}
+    def __getattr__(self, key):
+        if key in self.cfg:
+            return self.cfg.get(key)
+        else:
+            raise AttributeError('no attribute for {}'.format(key))
+    def __str__(self):
+        return '{}:{}'.format(self.path, self.cfg)
 class AxServer:
-    def __init__(self, cfg):
-        self.cfg = cfg;
+    '''
+    workdir has file:
+    1. config:
+    '''
+    def __init__(self, workdir):
+        self.workdir, self.config_file = workdir, '{}/config.py'.format(workdir)
+        self.cfg = Config(self.config_file)
+        logging.info('load config: %s', self.cfg)
+        self.port = AxPort(self.cfg.self_addr)
         self.is_req_stop = False
         signal.signal(signal.SIGINT, self.handle_signal)
         signal.signal(signal.SIGTERM, self.handle_signal)
+
+    def handle_signal(self, sig, frame):
+        self.req_stop()
+
+    def req_stop(self):
+        self.is_req_stop = True
 
     def handle_event(self, arg):
         if arg == 'timer':
             pass
         else:
             pass
-    def handle_signal(self, sig, frame):
-        logging.warn('receive sig: {}, stop server'.format(sig))
-        self.stop()
-
     def thread_func(self, arg):
         logging.info('start thread: {}'.format(arg))
         while not self.is_req_stop:
@@ -65,8 +89,6 @@ class AxServer:
     def start(self):
         for arg in 'timer net'.split():
             threading.Thread(target=self.thread_func, args=(arg,), name=arg).start()
-    def stop(self):
-        self.is_req_stop = True
     def main_loop(self):
         logging.info('start main_loop')
         while not self.is_req_stop:
@@ -89,6 +111,10 @@ class AxApp(AxAppBase):
         AxAppBase.__init__(self)
         
     @ExportAsCmd
+    def echo(self, msg: 'str: msg to echo')->'print msg':
+        pinfo(msg)
+
+    @ExportAsCmd
     def start(self, working_dir: 'str: working directory for app')->'start status':
         '''start AxServer'''
         if not working_dir: raise AxCmdArgsError('start: need specify "working_dir"')
@@ -104,7 +130,7 @@ class AxApp(AxAppBase):
         client.reconfigure(old_group.split(','), new_group.split(','))
 
 if __name__ == '__main__':
-    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s %(thread)d %(message)s', level=logging.INFO)
     app = AxApp()
     app.run(sys.argv[1:])
     

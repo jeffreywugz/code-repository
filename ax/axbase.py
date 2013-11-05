@@ -5,6 +5,7 @@ import traceback
 import re
 import threading
 import queue
+import socket
 
 class AxException(Exception):
     def __init__(self, msg):
@@ -34,6 +35,16 @@ def pinfo(msg):
 def pwarn(msg):
     return pcolor(msg, 31)
 
+def load_file(path):
+    env = dict()
+    try:
+        with open(path) as f:
+            exec(f.read(), env, env)
+    except Exception as e:
+        print(e)
+    finally:
+        return env
+
 class Packet:
     def __init__(self, src=None, dest=None, deadline=None, msg=None):
         bind(self, locals())
@@ -57,6 +68,7 @@ class AxUDPSocket:
         self.addr = addr
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(addr)
+        logging.info('bind: %s', addr)
     def push(self, pkt):
         msg = pkt.serialize()
         logging.debug('send msg: len={}, src={}, dest={}'.format(len(msg), self.addr, pkt.dest))
@@ -127,8 +139,7 @@ class AxAppBase:
             return method(*list_args[1:], **kw_args)
         except AxCmdArgsError as e:
             pwarn(e)
+            pwarn('list_args={} kw_args={}'.format(list_args, kw_args))
             show_help()
         except Exception as e:
             pwarn(traceback.format_exc())
-            pwarn('func="{}", list_args={} kw_args={}'.format(list_args[0], list_args[1:], kw_args))
-            show_help()
