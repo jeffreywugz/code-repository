@@ -58,6 +58,8 @@ class Packet:
         attrs = json.loads(str(pktbuf, "utf-8"))
         self.cate, self.pcode, self.src, self.dest, self.deadline = attrs['cate'], attrs['pcode'], attrs['src'], attrs['dest'], attrs['deadline']
         self.msg = attrs['msg']
+    def __str__(self):
+        return 'Packet(<{}:{}>, {}->{}, deadline={}, {})'.format(self.cate, self.pcode, self.src, self.dest, self.deadline, self.msg)
 
 class AxTimerQueue:
     def __init__(self):
@@ -88,7 +90,7 @@ class AxUDPSocket:
         pkt.src = self.addr
         pktbuf = pkt.serialize()
         logging.debug('send msg: len={}, src={}, dest={}'.format(len(pktbuf), self.addr, pkt.dest))
-        return self.sock.sendto(pktbuf, pkt.dest)
+        return self.sock.sendto(pktbuf, tuple(pkt.dest))
     def pop(self):
         try:
             pktbuf, addr = self.sock.recvfrom(1024)

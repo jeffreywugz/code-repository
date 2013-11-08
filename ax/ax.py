@@ -90,13 +90,16 @@ class AxServer:
         self.port.push(pkt)
     def ping(self, pkt):
         pkt.src, pkt.dest = pkt.dest, pkt.src
-        self.push(inpkt)
+        yield pkt
+    def default_handler(self, pkt):
+        logging.warn("unknown pkt: %s", pkt)
     def handle_event(self, pkt):
         if pkt == None: return None
-        if pkt.pcode == inpkt:
-            self.ping(pkt)
-        else:
-            logging.warn("unknown pkt: %s", pkt)
+        handler_map = {AxServer.PING:self.ping}
+        handler = handler_map.get(pkt.pcode, self.default_handler)
+        logging.info('handle %s', pkt)
+        for pkt in handler(pkt):
+            self.push(pkt)
     def thread_func(self, arg):
         logging.info('start thread: {}'.format(arg))
         while not self.is_req_stop:
