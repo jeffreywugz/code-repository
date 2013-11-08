@@ -5,6 +5,7 @@ ax.py: log replication server
 from axbase import *
 import time
 import signal
+import os
 
 class MainRecord:
     def __init__(self):
@@ -56,11 +57,16 @@ class Config:
             raise AttributeError('no attribute for {}'.format(key))
     def __str__(self):
         return '{}:{}'.format(self.path, self.cfg)
+
 class AxServer:
     '''
     workdir has file:
     1. config:
     '''
+    PING = 1
+    APPEND = 2
+    VOTE_REQ = 3
+    FETCH = 4
     def __init__(self, workdir):
         self.workdir, self.config_file = workdir, '{}/config.py'.format(workdir)
         self.cfg = Config(self.config_file)
@@ -74,17 +80,27 @@ class AxServer:
         self.req_stop()
 
     def req_stop(self):
+        if self.is_req_stop:
+            os.kill(0, signal.SIGKILL)
         self.is_req_stop = True
 
-    def handle_event(self, arg):
-        if arg == 'timer':
-            pass
+    def pop(self, cate):
+        return self.port.pop({'timer':AxPktCate.Timer, 'net':AxPktCate.Normal}[cate])
+    def push(self, pkt):
+        self.port.push(pkt)
+    def ping(self, pkt):
+        pkt.src, pkt.dest = pkt.dest, pkt.src
+        self.push(inpkt)
+    def handle_event(self, pkt):
+        if pkt == None: return None
+        if pkt.pcode == inpkt:
+            self.ping(pkt)
         else:
-            pass
+            logging.warn("unknown pkt: %s", pkt)
     def thread_func(self, arg):
         logging.info('start thread: {}'.format(arg))
         while not self.is_req_stop:
-            self.handle_event(arg)
+            self.handle_event(self.pop(arg))
         logging.info('stop thread: {}'.format(arg))
     def start(self):
         for arg in 'timer net'.split():
@@ -95,9 +111,18 @@ class AxServer:
             time.sleep(1)
         logging.info('stop main_loop')
 
+def mkserver(spec):
+    spec_list = spec.split(':')
+    if len(spec_list) != 2: raise AxException('invalid server spec')
+    ip, port = spec_list
+    return ip, int(port)
 class AxClient:
     def __init__(self):
-        pass
+        self.port = AxPort(('127.0.0.1', 0))
+    def ping(self, dest, msg):
+        logging.info('ping dest=%s, msg=%s', dest, msg)
+        pkt = Packet(pcode=AxServer.PING, dest=dest, msg=msg)
+        self.port.push(pkt)
     def reconfigure(self, old_group, new_group):
         pass
     
@@ -113,6 +138,11 @@ class AxApp(AxAppBase):
     @ExportAsCmd
     def echo(self, msg: 'str: msg to echo')->'print msg':
         pinfo(msg)
+
+    @ExportAsCmd
+    def ping(self, server:"ip:port", msg: 'str: ping msg to echo')->'server return msg':
+        client = AxClient()
+        client.ping(mkserver(server), msg)
 
     @ExportAsCmd
     def start(self, working_dir: 'str: working directory for app')->'start status':

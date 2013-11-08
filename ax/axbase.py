@@ -3,6 +3,7 @@ import logging
 import inspect
 import traceback
 import re
+import json
 import threading
 import queue
 import socket
@@ -19,7 +20,7 @@ class AxCmdArgsError(AxException):
     pass
 
 def bind(self, mapping):
-    for k, v in mapping:
+    for k, v in mapping.items():
         setattr(self, k, v)
 
 def pcolor(msg, color):
@@ -45,9 +46,19 @@ def load_file(path):
     finally:
         return env
 
+class AxPktCate:
+    Timer = 1
+    Normal = 2
 class Packet:
-    def __init__(self, src=None, dest=None, deadline=None, msg=None):
+    def __init__(self, cate=AxPktCate.Normal, pcode=None, src=None, dest=None, deadline=None, msg=None):
         bind(self, locals())
+    def serialize(self):
+        return bytes(json.dumps(dict(cate=self.cate, pcode=self.pcode, src=self.src, dest=self.dest, deadline=self.deadline, msg=self.msg)), "utf-8")
+    def deserialize(self, pktbuf):
+        attrs = json.loads(str(pktbuf, "utf-8"))
+        self.cate, self.pcode, self.src, self.dest, self.deadline = attrs['cate'], attrs['pcode'], attrs['src'], attrs['dest'], attrs['deadline']
+        self.msg = attrs['msg']
+
 class AxTimerQueue:
     def __init__(self):
         self.queue = queue.PriorityQueue()
@@ -56,33 +67,38 @@ class AxTimerQueue:
         return self.queue.push((deadline, pkt))
     def pop(self):
         with self.lock:
-            deadline, pkt = self.queue.get()
-            cur_time = time.time()
-            if cur_time >= deadline:
-                return pkt
-            else:
-                self.queue.put((deadline, pkt))
+            try:
+                deadline, pkt = self.queue.get(True, 1)
+                cur_time = time.time()
+                if cur_time >= deadline:
+                    return pkt
+                else:
+                    self.queue.put((deadline, pkt))
+            except queue.Empty as e:
+                return None
 
 class AxUDPSocket:
     def __init__(self, addr):
-        self.addr = addr
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(addr)
-        logging.info('bind: %s', addr)
+        self.addr = self.sock.getsockname()
+        self.sock.settimeout(1)
+        logging.info('bind: %s', self.addr)
     def push(self, pkt):
-        msg = pkt.serialize()
-        logging.debug('send msg: len={}, src={}, dest={}'.format(len(msg), self.addr, pkt.dest))
-        return self.sock.sendto(msg, pkt.dest)
+        pkt.src = self.addr
+        pktbuf = pkt.serialize()
+        logging.debug('send msg: len={}, src={}, dest={}'.format(len(pktbuf), self.addr, pkt.dest))
+        return self.sock.sendto(pktbuf, pkt.dest)
     def pop(self):
-        msg, addr = self.sock.recvfrom(1024)
-        logging.debug('recv msg: len={}, src={}, dest={}'.format(len(msg), addr, self.addr))
-        pkt = Packet()
-        pkt.deseiralize(msg)
-        return pkt
+        try:
+            pktbuf, addr = self.sock.recvfrom(1024)
+            logging.debug('recv msg: len={}, src={}, dest={}'.format(len(pktbuf), addr, self.addr))
+            pkt = Packet()
+            pkt.deserialize(pktbuf)
+            return pkt
+        except socket.timeout as e:
+            return None
 
-class AxPktCate:
-    Timer = 1
-    Normal = 2
 class AxPort:
     def __init__(self, addr):
         self.sock = AxUDPSocket(addr)
