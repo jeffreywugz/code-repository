@@ -2,13 +2,13 @@ disk-latency.args = 10000 10240
 io-stress.args = async
 cc = gcc
 cxx = g++
-cflags = -lpthread -lrt -std=c99 -g -O2 -D_GNU_SOURCE
+cflags = -lpthread -lrt -std=c99 -g -O2 -D_GNU_SOURCE -laio
 cxxflags = -lpthread -lrt -laio -g -O2 -D_GNU_SOURCE
 sshpass=~/work/bin/sshpass -f root.pass
 #remote-host=root@my163071.cm6
 remote-host=root@10.13.249.192
 remote-dir=/data/log1
-all: io-stress.log
+all: dio-check.exe
 help:
 	vfiles.py *.png
 io-stress.log: io-stress.exe

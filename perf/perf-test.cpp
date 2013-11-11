@@ -1,6 +1,20 @@
 #include <locale.h>
 #include "profile.h"
 
+class MallocCallable: public OneLoopCallable
+{
+  public:
+    MallocCallable() {}
+    ~MallocCallable() {}
+    int do_once(int64_t idx) {
+      UNUSED(idx);
+      char* buf = (char*)malloc(1024);
+      free(buf);
+      return 0;
+    }
+  private:
+};
+
 class MutexCallable: public OneLoopCallable
 {
   public:
@@ -123,6 +137,25 @@ class GetUsCallable: public OneLoopCallable
     int64_t last_time_;
 };
 
+class RDLockCallable: public OneLoopCallable
+{
+  public:
+    RDLockCallable(){
+      pthread_rwlock_init(&rwlock_, NULL);
+    }
+    ~RDLockCallable(){
+      pthread_rwlock_destroy(&rwlock_);
+    }
+  public:
+    int do_once(int64_t idx) {
+      pthread_rwlock_rdlock(&rwlock_);
+      pthread_rwlock_unlock(&rwlock_);
+      return 0;
+    }
+  private:
+    pthread_rwlock_t rwlock_;
+};
+
 #include "fast-spinlock.h"
 class FastSpinLockCallable: public OneLoopCallable
 {
@@ -176,6 +209,10 @@ class Perf
       BaseWorker worker;
       return worker.set_thread_num(n_thread).par_do(callable, time_limit);
     }
+    int malloc() {
+      MallocCallable callable;
+      return profile(&callable);
+    }
     int mutex() {
       MutexCallable callable;
       return profile(&callable);
@@ -186,6 +223,10 @@ class Perf
     }
     int tsi() {
       TSICallable callable;
+      return profile(&callable);
+    }
+    int rdlock() {
+      RDLockCallable callable;
       return profile(&callable);
     }
     int add() {
@@ -217,7 +258,9 @@ class Perf
 #define report_error(err, ...) if (0 != err)fprintf(stderr, __VA_ARGS__);
 const char* _usages = "Usages:\n"
   "\t# Common Environment nthread=1 time_limit=1\n"
+  "\t%1$s malloc\n"
   "\t%1$s mutex\n"
+  "\t%1$s rdlock\n"
   "\t%1$s spinlock\n"
   "\t%1$s tsi\n"
   "\t%1$s add\n"
@@ -232,7 +275,11 @@ int main(int argc, char** argv)
   int err = 0;
   Perf perf;
   setlocale(LC_ALL, "");
-  if (-EAGAIN != (err = CmdCall(argc, argv, perf.mutex):-EAGAIN))
+  if (-EAGAIN != (err = CmdCall(argc, argv, perf.malloc):-EAGAIN))
+  {
+    report_error(err, "mutex()=>%d", err);
+  }
+  else if (-EAGAIN != (err = CmdCall(argc, argv, perf.mutex):-EAGAIN))
   {
     report_error(err, "mutex()=>%d", err);
   }
@@ -243,6 +290,10 @@ int main(int argc, char** argv)
   else if (-EAGAIN != (err = CmdCall(argc, argv, perf.tsi):-EAGAIN))
   {
     report_error(err, "tsi()=>%d", err);
+  }
+  else if (-EAGAIN != (err = CmdCall(argc, argv, perf.rdlock):-EAGAIN))
+  {
+    report_error(err, "rdlock()=>%d", err);
   }
   else if (-EAGAIN != (err = CmdCall(argc, argv, perf.add):-EAGAIN))
   {

@@ -236,6 +236,7 @@ class AsyncIOWorker: public IOWorker
     io_context_t ctx_;
 };
 
+
 int io_stress(IOWorker* worker)
 {
   int err = 0;

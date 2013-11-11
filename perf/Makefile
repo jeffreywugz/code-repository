@@ -4,7 +4,7 @@ perf-test.args = getus
 cc = gcc
 cxx = g++
 cflags = -lpthread -lrt -std=c99 -g -O2 -D_GNU_SOURCE
-cxxflags = -g -lpthread -lrt -Wall -O2 --no-strict-aliasing
+cxxflags = -g -lpthread -lrt -Wall -O2 --no-strict-aliasing --no-omit-frame-pointer
 
 all: $(target).run
 %.run: %.exe

@@ -11,3 +11,6 @@ log writer要提供的接口:
 #+BEGIN_SRC cpp
 class ObLogWriter
 #+END_SRC
+
+* 状态定义
+  state: (epoch, viewno, status, self, cur_group, old_group
