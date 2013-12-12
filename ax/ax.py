@@ -119,9 +119,20 @@ def mkserver(spec):
     if len(spec_list) != 2: raise AxException('invalid server spec')
     ip, port = spec_list
     return ip, int(port)
+
 class AxClient:
     def __init__(self):
         self.port = AxPort(('127.0.0.1', 0))
+        self.counter = AtomicCounter()
+        self.wait_queue = WaitQueue(1024)
+    def send_recv(self, pcode, dest, msg, timeout):
+        seq = self.counter.next()
+        wait_obj = self.
+        logging.info('send seq=%s, dest=%s, msg=%s', seq, dest, msg)
+        pkt = Packet(pcode=pcode, dest=dest, msg=(seq,msg))
+        self.port.push(pkt)
+        return wait_obj.wait(seq, timeout)
+        
     def ping(self, dest, msg):
         logging.info('ping dest=%s, msg=%s', dest, msg)
         pkt = Packet(pcode=AxServer.PING, dest=dest, msg=msg)

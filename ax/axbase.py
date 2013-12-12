@@ -46,6 +46,48 @@ def load_file(path):
     finally:
         return env
 
+class AtomicCounter:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.value = 0
+    def next(self):
+        with self.lock:
+            value = self.value
+            self.value++
+        return value
+
+class WaitObj:
+    def __init__(self):
+        self.cond = threading.Condition()
+        self.seq, self.value = -1, None
+
+    def is_set(self, seq):
+        return self.seq < seq
+
+    def wait(self, seq, timeout):
+        with self.cond:
+            self.cond.wait_for(self.predict, timeout)
+            if self.seq != seq:
+                return None
+            else:
+                return self.value
+
+    def set(self, seq, value):
+        with self.cond:
+            if self.seq > seq:
+                return False
+            else:
+                self.value = value
+                self.seq = seq
+                return True
+
+class WaitQueue:
+    def __init__(self, qlen):
+        self.qlen = qlen
+        self.wait_queue = (WaitObj() for i in range(qlen))
+    def get(self, i):
+        return self.wait_queue[i % self.qlen]
+
 class AxPktCate:
     Timer = 1
     Normal = 2
