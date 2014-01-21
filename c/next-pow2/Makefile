@@ -4,6 +4,7 @@ cc = gcc
 cxx = g++
 cflags = -lpthread -std=c99 -O2
 cxxflags = -lpthread -O2
+src-list = 
 all: $(target).test
 %.test: %.exe
 	./$< $($*.args)
