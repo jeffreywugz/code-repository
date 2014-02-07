@@ -1,0 +1,18 @@
+#+Title: log replication
+#+Options: toc:nil ^:{}
+
+* 定义
+  #+begin_src cpp
+  struct Cursor
+  {
+  };
+  #+end_src
+* 模块分解
+** LogStore
+** MetaStore
+** LogSync
+** MemberManager
+** LeaderElection
+** CommitDecider
+
+
