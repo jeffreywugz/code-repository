@@ -75,15 +75,28 @@ struct Token
   uint64_t start_time_;
 };
 
+struct GroupConfig
+{
+  TokenList active_tokens_;
+  ServerList group0_;
+  ServerList group1_;
+};
+
+struct MetaCheckPoint
+{
+  Cursor frozen_cursor_;
+  GroupConfig group_config_;
+};
+
 struct MetaRecord
 {
   RecordHeader header_;
   uint64_t version_;
   Token self_;
+  Term term_;
+  Server leader_;
   Cursor commit_cursor_;
-  TokenList active_tokens_;
-  ServerList group0_;
-  ServerList group1_;
+  GroupConfig group_config_;
 };
 
 struct LogEntry
@@ -93,10 +106,5 @@ struct LogEntry
   Pos pos_;
 };
 
-struct GroupConfig
-{
-  ServerList group0_;
-  ServerList group1_;
-};
 
 
