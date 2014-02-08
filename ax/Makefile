@@ -1,24 +1,25 @@
-PRJ=ax
-CC=gcc
-CPP=cpp
-CFLAG=-Wall -Werror -g
-LDFLAG=
+target = ax
+cxx = g++
+ld = g++
+cpp = cpp
+cxxflags = -Wall -Werror -g
+ldflags = -lpthread
 .PHONY: all run clean  dep
 
-SRCS= $(wildcard *.c)
-OBJS= $(patsubst %.c,%.o,$(SRCS))
+srcs= $(wildcard *.cpp)
+objs= $(patsubst %.cpp,%.o,$(srcs))
 
-all: $(PRJ)
-$(PRJ): $(OBJS)
-	$(CC) -o $@ $(LDFLAG) $^
-%.o: %.c
-	$(CC) -c  $(CFLAG) $<
-run: $(PRJ)
-	./$(PRJ)
+all: $(target)
+$(target): $(objs)
+	$(ld) -o $@ $(ldflags) $^
+%.o: %.cpp
+	$(cxx) -c  $(cxxflags) $<
+run: $(target)
+	./$(target)
 clean:
-	rm -rf $(PRJ) *.o *~ .dep
+	rm -rf $(target) *.o *~ .dep
 dep:
-	(for f in $(SRCS);do echo -n "";$(CPP) -M -MM -MG $$f;done) >> .dep
+	(for f in $(srcs);do echo -n "";$(cpp) -M -MM -MG $$f;done) >> .dep
 
 ### Dependencies:
 -include .dep

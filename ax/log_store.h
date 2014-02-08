@@ -76,15 +76,44 @@ private:
   int wait();
 };
 
-int keep_live
+class AxHandler
 {
-  if (AX_SUCCESS != (err = try_init()))
-  {}
-  else if (AX_SUCCESS != (err = 
-}
+public:
+  int main_loop()
+  {
+    return keep_alive();
+  }
+  int keep_alive()
+  {
+    if (AX_SUCCESS != (err = try_init()))
+    {}
+    else if (AX_SUCCESS != (err = try_recovery()))
+    {}
+    else if (AX_SUCCESS != (err = try_catchup()))
+    {}
+  }
+};
+
+class StateMgr
+{
+  enum State {INIT, RECOVERING, ACTIVE};
+  State get_state() {}
+  int main_loop()
+  {
+    while(!is_stopped())
+    {
+    }
+  }
+  int do_init(){ // load meta
+  }
+  int do_recovery() { // replay meta
+  }
+  int do_
+};
+
 int do_catchup()
 {
   int err = 0;
-  if (is
   return err;
 }
+           
