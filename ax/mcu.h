@@ -6,6 +6,9 @@
 
 #define FAA(x, i) __sync_fetch_and_add((x), (i))
 #define CAS(x, ov, nv) __sync_compare_and_swap((x), (ov), (nv))
+#define AL(x) __atomic_load((x))
+#define AS(x, v) __atomic_store((x), (v))
+
 #define futex(...) syscall(SYS_futex,__VA_ARGS__)
 
 inline int futex_wake(volatile int* p, int val)

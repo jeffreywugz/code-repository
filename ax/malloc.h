@@ -60,4 +60,55 @@ private:
   MallocModDesc mods_[MOD_COUNT_LIMIT];
 };
 
+class MemAllocator
+{
+public:
+  struct Block
+  {
+    Block(int mod_id, int64_t size): mod_id_(mod_id), size_(size) {}
+    ~Block() {}
+    int mod_id_;
+    int64_t size_;
+    char buf_[0];
+  };
+public:
+  void* alloc(int64_t size, int mod_id) {
+    Block* block = alloc_block(size, mod_id);
+    return NULL != block? block->buf_: NULL;
+  }
+  void free(void* p) {
+    if (NULL != p)
+    {
+      Block* block = (Block*)(p) - 1;
+      free_block(block);
+    }
+  }
+protected:
+  Block* alloc_block(int64_t size, int mod_id) {
+    if (size > 0)
+    {
+      int64_t alloc_size = size + sizeof(Block);
+      Block* block = malloc(alloc_size);
+      if (NULL != block)
+      {
+        mod_set_.update(mod_id, used);
+        new(block)Block(mod_id, size);
+      }
+    }
+    return block;
+  }
+  void free_block(Block* block)
+  {
+    if (NULL != block)
+    {
+      mod_set_.update(mod_id, -used);
+      free(block);
+    }
+  }
+private:
+  MallocModSet mod_set_;
+};
+
+void* ax_malloc(size_t size, int mod_id);
+void ax_free(void* p);
 #endif /* __OB_AX_MALLOC_H__ */

@@ -1,13 +1,31 @@
+
 class Printer
 {
 public:
-  Printer(const char* buf, int64_t len): buf_(buf), limit_(len), pos_(0) {
-    if (NULL != buf_ && limit_ > 0)
+  Printer(int64_t buf_size = 4096): buf_(NULL), limit_(0), pos_(0) {
+    char* buf = ax_malloc(buf_size);
+    if (NULL != buf)
+    {
+      buf_ = buf;
+      limit_ = buf_size;
+      pos_ = 0;
+    }
+  }
+
+  ~Printer() {
+    if (NULL != buf_)
+    {
+      ax_free(buf_);
+      buf_ = NULL;
+    }
+  }
+  void reset() {
+    pos_ = 0;
+    if (NULL != buf_)
     {
       *buf_ = 0;
     }
   }
-  ~Printer() {}
   char* get_str(){
     return NULL != buf_ && limit_ > 0? buf_: NULL;
   }
@@ -46,4 +64,15 @@ private:
 };
 
 template<typename T>
-int format
+char* __repr__(Printer& printer, T& t)
+{
+  return t.repr(printer);
+}
+
+Printer& get_tl_printer()
+{
+  static Printer printer[AX_MAX_THREAD_NUM];
+  return printer[itid()];
+}
+
+#define repr(t) __repr__(get_tl_printer(), t)

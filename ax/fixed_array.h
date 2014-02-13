@@ -14,7 +14,6 @@ public:
     if (len < MIN_ARRAY_LEN || 0 != ((len-1) & len))
     {
       err = AX_INVALID_ARGUMENT;
-      TBSYS_LOG(ERROR, "INVALID_ARGUMENT: len=%ld", len);
     }
     else if (NULL != items_)
     {
@@ -22,8 +21,7 @@ public:
     }
     else if (NULL == (items_ = (Item*)ax_malloc(sizeof(Item) * len, ObModIds::AX_SEQ_QUEUE)))
     {
-      err = AX_ALLOCATE_MEMORY_FAILED;
-      TBSYS_LOG(ERROR, "ob_malloc(%ld): failed", sizeof(Item) * len);
+      err = AX_NOMEM;
     }
     for(int64_t i = 0; AX_SUCCESS == err && i < len; i++)
     {

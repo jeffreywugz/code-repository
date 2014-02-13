@@ -9,6 +9,7 @@ ERRNO_DEF(NOT_INIT, -6, "not init")
 ERRNO_DEF(IO_ERR, -9, "io error")
 ERRNO_DEF(SIZE_OVERFLOW, -19, "array size overflow")
 ERRNO_DEF(BUF_OVERFLOW, -20, "buf size overflow")
+ERRNO_DEF(EAGAIN, -23, "resource busy")
 #endif
 
 #ifdef PCODE_DEF
@@ -58,9 +59,7 @@ inline int64_t get_us()
   return time_val.tv_sec*1000000 + time_val.tv_usec;
 }
 
-void *(*ax_malloc)(size_t size) = malloc;
-void (*ax_free)(void *ptr) = free;
-
 #include "ax_types.h"
 #include "debug_log.h"
+#include "malloc.h"
 #endif /* __OB_AX_AX_COMMON_H__ */
