@@ -13,14 +13,21 @@ public:
   enum { BUF_SIZE = 1<<12 };
 public:
   MLog(const char* path): fd_(-1) {
-    fd_ = open(path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (NULL != path)
+    {
+      fd_ = open(path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    }
+    else
+    {
+      fd_ = 1;
+    }
   }
   ~MLog() {
-    if (fd_ > 0)
-    {
-      close(fd_);
-      fd_ = -1;
-    }
+    // if (fd_ > 0)
+    // {
+    //   close(fd_);
+    //   fd_ = -1;
+    // }
   }
 public:
   int append(const char* format, ...) {
@@ -73,7 +80,7 @@ private:
   int fd_;
 };
 inline MLog& get_mlog() {
-  static MLog mlog(getenv("mlog_path")?: "mlog.log");
+  static MLog mlog(getenv("mlog_path"));
   return mlog;
 }
 #define DLOG(prefix, format, ...) get_mlog().append("[%ld] %s %s:%ld [%ld] " format "\n", get_us(), #prefix, __FILE__, __LINE__, pthread_self(), ##__VA_ARGS__)

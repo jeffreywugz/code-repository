@@ -8,6 +8,7 @@ ERRNO_DEF(INIT_TWICE, -5, "init twice")
 ERRNO_DEF(NOT_INIT, -6, "not init")
 ERRNO_DEF(IO_ERR, -9, "io error")
 ERRNO_DEF(SIZE_OVERFLOW, -19, "array size overflow")
+ERRNO_DEF(BUF_OVERFLOW, -20, "buf size overflow")
 #endif
 
 #ifdef PCODE_DEF
@@ -38,100 +39,11 @@ PCODE_DEF(INSPECT, 4, "inspect")
 
 #define UNUSED(v) ((void)(v))
 
-// basic struct define
-struct Buffer
-{
-  Buffer(): limit_(0), used_(0), buf_(NULL) {}
-  ~Buffer() {}
-  int parse(const char* spec);
-  void dump();
-  uint64_t limit_;
-  uint64_t used_;
-  char* buf_;
-};
-
-struct RecordHeader
-{
-  uint32_t magic_;
-  uint32_t len_;
-  uint64_t checksum_;
-};
-
-struct Server
-{
-  Server(): ip_(0), port_(0) {}
-  ~Server() {}
-  int parse(const char* spec);
-  uint32_t ip_;
-  uint32_t port_;
-};
-
-#define MAX_SERVER_COUNT 8
-struct ServerList
-{
-  ServerList(): count_(0) {}
-  ~ServerList() {}
-  int parse(const char* spec);
-  int count_;
-  Server servers_[MAX_SERVER_COUNT];
-};
-
-typedef uint64_t Term;
-typedef uint64_t Pos;
-struct Cursor
-{
-  Cursor(): term_(), pos_() {}
-  ~Cursor() {}
-  int parse(const char* spec);
-  Term term_;
-  Pos pos_;
-};
-
-struct Token
-{
-  Server server_;
-  uint64_t start_time_;
-};
-
-#define MAX_TOKEN_COUNT 8
-struct TokenList
-{
-  TokenList(): count_(0) {}
-  ~TokenList() {}
-  int count_;
-  Token tokens_[MAX_TOKEN_COUNT];
-};
-
-struct GroupConfig
-{
-  TokenList active_tokens_;
-  ServerList group0_;
-  ServerList group1_;
-};
-
-struct MetaCheckPoint
-{
-  Cursor frozen_cursor_;
-  GroupConfig group_config_;
-};
-
-struct MetaRecord
-{
-  RecordHeader header_;
-  uint64_t version_;
-  Token self_;
-  Term term_;
-  Server leader_;
-  Cursor commit_cursor_;
-  GroupConfig group_config_;
-};
-
-struct LogEntry
-{
-  RecordHeader header_;
-  Term term_;
-  Pos pos_;
-};
+// sys config
+#define AX_MAX_THREAD_NUM 1024
+#define CACHE_ALIGN_SIZE 64
+#define CACHE_ALIGNED __attribute__((aligned(CACHE_ALIGN_SIZE)))
+#define DIO_ALIGN_SIZE 512
 
 template<typename T>
 int parse(T& t, const char* spec)
@@ -145,6 +57,10 @@ inline int64_t get_us()
   gettimeofday(&time_val, NULL);
   return time_val.tv_sec*1000000 + time_val.tv_usec;
 }
-#include "debug_log.h"
 
+void *(*ax_malloc)(size_t size) = malloc;
+void (*ax_free)(void *ptr) = free;
+
+#include "ax_types.h"
+#include "debug_log.h"
 #endif /* __OB_AX_AX_COMMON_H__ */
