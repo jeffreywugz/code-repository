@@ -78,5 +78,5 @@ class StrTok
     char* str_;
     const char* delim_;
     char* savedptr_;
-};    
+};
 #endif /* __AX_AX_AX_UTILS_H__ */

@@ -111,4 +111,5 @@ private:
 
 void* ax_malloc(size_t size, int mod_id);
 void ax_free(void* p);
+
 #endif /* __OB_AX_MALLOC_H__ */
