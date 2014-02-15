@@ -10,10 +10,13 @@ ERRNO_DEF(IO_ERR, -9, "io error")
 ERRNO_DEF(SIZE_OVERFLOW, -19, "array size overflow")
 ERRNO_DEF(BUF_OVERFLOW, -20, "buf size overflow")
 ERRNO_DEF(QUEUE_OVERFLOW, -21, "queue size overflow")
+ERRNO_DEF(HASH_OVERFLOW, -21, "hash size overflow")
 ERRNO_DEF(EAGAIN, -23, "resource busy")
 ERRNO_DEF(EPOLL_CREATE_ERR, -25, "epoll create fail")
 ERRNO_DEF(EPOLL_WAIT_ERR, -26, "epoll wait fail")
 ERRNO_DEF(EPOLL_CTL_ERR, -27, "epoll ctl fail")
+ERRNO_DEF(STATE_NOT_MATCH, -27, "epoll ctl fail")
+ERRNO_DEF(NOT_EXIST, -27, "entry not exist")
 #endif
 
 #ifdef PCODE_DEF

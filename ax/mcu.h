@@ -47,3 +47,32 @@ public:
 private:
   char items_[AX_MAX_THREAD_NUM][CACHE_ALIGN_SIZE];
 };
+
+struct SpinLock
+{
+  struct Guard
+  {
+    Guard(SpinLock& lock): lock_(lock) {
+      lock_.lock();
+    }
+    ~Guard() {
+      lock_.unlock();
+    }
+    SpinLock& lock_;
+  }
+  
+  bool try_lock() {
+    return CAS(&lock_, 0, 1);
+  }
+
+  bool lock() {
+    while(!try_lock())
+    {
+      PAUSE();
+    }
+  }
+  bool unlock() {
+    return CAS(&lock_, 1, 0);
+  }
+  uint64_t lock_;
+};
