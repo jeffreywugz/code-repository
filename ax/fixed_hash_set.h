@@ -111,8 +111,10 @@ public:
     return err;
   }
 private:
-  FixedArray<Slot> slot_array_;
-  ObjPool<Item> item_pool_;
+  int64_t len_;
+  Slot* slots_;
+  Item* items_;
+  SpinQueue item_;
 };
 
 #endif /* __OB_AX_FIXED_HASH_SET_H__ */

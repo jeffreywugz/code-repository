@@ -1,3 +1,5 @@
+typedef uint64_t id_t;
+#define INVALID_ID (~0UL)
 // basic struct define
 struct Buffer
 {

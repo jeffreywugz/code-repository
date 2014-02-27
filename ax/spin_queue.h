@@ -1,19 +1,32 @@
 #include "ax_common.h"
-#include "ob_fixed_array.h"
 
 class SpinQueue
 {
 public:
-  struct Item
-  {
-    Item(int64_t seq): data_(NULL) { UNUSED(seq); }
-    ~Item() {}
-    void* data_;
-  };
-public:
-  SpinQueue(): push_(0), pop_(0) {}
-  ~SpinQueue(){}
-  int init(int64_t size) { return items_.init(size); }
+  SpinQueue(): push_(0), pop_(0), len_(0), items_(NULL) {}
+  ~SpinQueue(){ destroy(); }
+  int init(int64_t size, void* buf) {
+    int err = AX_SUCCESS;
+    if (size < 0 || !is2n(size) || NULL == buf)
+    {
+      err = AX_NOT_INIT;
+    }
+    else
+    {
+      len_ = size;
+      buf_ = buf;
+      memset(buf_, 0, calc_mem_usage(size));
+    }
+    return err;
+  }
+  void destroy() {
+    push_ = 0;
+    pop_ = 0;
+    len_ = 0;
+    items_ = 0;
+  }
+  static int64_t calc_mem_usage(int64_t capacity) { return sizeof(void*) * capacity; }
+  int64_t idx(int64_t x) { return x & (len_ - 1); }
   int push(void* p) {
     int err = AX_EAGAIN;
     int64_t push = -1;
@@ -21,13 +34,13 @@ public:
     {
       err = AX_INVALID_ARGUMENT;
     }
-    else if (!items_.is_inited())
+    else if (NULL == items_)
     {
       err = AX_NOT_INIT;
     }
     else
     {
-      while((push = AL(&push_)) < AL(&pop_) + items_.len())
+      while((push = AL(&push_)) < AL(&pop_) + len_)
       {
         if (!CAS(&push_, push, push + 1))
         {
@@ -35,7 +48,7 @@ public:
         }
         else
         {
-          while(!CAS(&items_.get(push)->data_, NULL, p))
+          while(!CAS(items_ + idx(push), NULL, p))
           {
             PAUSE();
           }
@@ -49,7 +62,7 @@ public:
   int pop(void*& p) {
     int err = AX_EAGAIN;
     int64_t pop = -1;
-    if (!items_.is_inited())
+    if (NULL == items_)
     {
       err = AX_NOT_INIT;
     }
@@ -63,9 +76,8 @@ public:
         }
         else
         {
-          Item* item = items_.get(pop);
-          while(NULL == (p = AL(&item->data_))
-                || !CAS(&item->data_, p, NULL))
+          void** pdata = items_ + idx(pop);
+          while(NULL == (p = AL(pdata)) || !CAS(pdata, p, NULL))
           {
             PAUSE();
           }
@@ -79,5 +91,6 @@ public:
 private:
   int64_t push_ CACHE_ALIGNED;
   int64_t pop_ CACHE_ALIGNED;
-  FixedArray<Item> items_;
+  int64_t len_;
+  void** items_;
 };

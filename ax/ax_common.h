@@ -6,17 +6,22 @@ ERRNO_DEF(CMD_ARGS_NOT_MATCH, -3, "cmd args not match")
 ERRNO_DEF(NO_MEM, -4, "no memory")
 ERRNO_DEF(INIT_TWICE, -5, "init twice")
 ERRNO_DEF(NOT_INIT, -6, "not init")
+ERRNO_DEF(EAGAIN, -7, "resource busy")
 ERRNO_DEF(IO_ERR, -9, "io error")
-ERRNO_DEF(SIZE_OVERFLOW, -19, "array size overflow")
-ERRNO_DEF(BUF_OVERFLOW, -20, "buf size overflow")
-ERRNO_DEF(QUEUE_OVERFLOW, -21, "queue size overflow")
-ERRNO_DEF(HASH_OVERFLOW, -21, "hash size overflow")
-ERRNO_DEF(EAGAIN, -23, "resource busy")
-ERRNO_DEF(EPOLL_CREATE_ERR, -25, "epoll create fail")
-ERRNO_DEF(EPOLL_WAIT_ERR, -26, "epoll wait fail")
-ERRNO_DEF(EPOLL_CTL_ERR, -27, "epoll ctl fail")
+ERRNO_DEF(SIZE_OVERFLOW, -20, "array size overflow")
+ERRNO_DEF(BUF_OVERFLOW, -21, "buf size overflow")
+ERRNO_DEF(QUEUE_OVERFLOW, -22, "queue size overflow")
+ERRNO_DEF(HASH_OVERFLOW, -23, "hash size overflow")
+ERRNO_DEF(POOL_OVERFLOW, -24, "pool overflow")
 ERRNO_DEF(STATE_NOT_MATCH, -27, "epoll ctl fail")
 ERRNO_DEF(NOT_EXIST, -27, "entry not exist")
+ERRNO_DEF(CALLBACK_NOT_SET, -28, "callback not set")
+ERRNO_DEF(ID_NOT_MATCH, -28, "ctx_mgr id not match")
+
+ERRNO_DEF(EPOLL_CREATE_ERR, -1000, "epoll create fail")
+ERRNO_DEF(EPOLL_WAIT_ERR, -1001, "epoll wait fail")
+ERRNO_DEF(EPOLL_CTL_ERR, -1002, "epoll ctl fail")
+ERRNO_DEF(SOCK_CREATE_ERR, -1010, "sock create fail")
 #endif
 
 #ifdef PCODE_DEF
@@ -46,12 +51,54 @@ PCODE_DEF(INSPECT, 4, "inspect")
 #undef PCODE_DEF
 
 #define UNUSED(v) ((void)(v))
+#define FAA(x, i) __sync_fetch_and_add((x), (i))
+#define CAS(x, ov, nv) __sync_compare_and_swap((x), (ov), (nv))
+#define AL(x) __atomic_load((x))
+#define AS(x, v) __atomic_store((x), (v))
+#define MBR() __sync_synchronize()
 
-// sys config
 #define AX_MAX_THREAD_NUM 1024
 #define CACHE_ALIGN_SIZE 64
 #define CACHE_ALIGNED __attribute__((aligned(CACHE_ALIGN_SIZE)))
 #define DIO_ALIGN_SIZE 512
+
+#include <errno.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <linux/futex.h>
+#define futex(...) syscall(SYS_futex,__VA_ARGS__)
+
+inline int futex_wake(volatile int* p, int val)
+{
+  int err = 0;
+  if (0 != futex((int*)p, FUTEX_WAKE_PRIVATE, val, NULL, NULL, 0))
+  {
+    err = errno;
+  }
+  return err;
+}
+
+inline int futex_wait(volatile int* p, int val, const timespec* timeout)
+{
+  int err = 0;
+  if (0 != futex((int*)p, FUTEX_WAIT_PRIVATE, val, timeout, NULL, 0))
+  {
+    err = errno;
+  }
+  return err;
+}
+
+volatile int64_t __next_tid __attribute__((weak));
+inline int64_t itid()
+{
+  static __thread int64_t tid = -1;
+  return tid < 0? (tid = __sync_fetch_and_add(&__next_tid, 1)): tid;
+}
+
+inline bool is2n(uint64_t n)
+{
+  return 0 == (n & (n -1));
+}
 
 template<typename T>
 int parse(T& t, const char* spec)
@@ -64,6 +111,20 @@ inline int64_t get_us()
   struct timeval time_val;
   gettimeofday(&time_val, NULL);
   return time_val.tv_sec*1000000 + time_val.tv_usec;
+}
+
+struct MemChunkCutter
+{
+  MemChunkCutter(int64_t limit, void* buf): limit_(limit), used_(0), buf_(buf) {}
+  ~MemChunkCutter() {}
+  int64_t limit_;
+  int64_t used_;
+  char* buf_;
+};
+template<typename T>
+int init_container(T& t, int64_t capacity, MemChunkCutter& allocator)
+{
+  return t.init(capacity, allocator.alloc(t.calc_mem_usage(capacity));
 }
 
 #include "ax_types.h"

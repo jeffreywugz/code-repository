@@ -62,9 +62,38 @@ public:
     void* data_;
   };
 public:
-  ObLightyQueue(): push_(1), pop_(1) {}
-  ~ObLightyQueue() {}
-  int init(int64_t qlen) { return items_.init(qlen); }
+  FutexQueue(): push_(1), pop_(1), size_(0), items_(NULL) {}
+  ~FutexQueue() { destroy(); }
+  static int64_t calc_mem_usage(int64_t size) { return sizeof(Item) * size; }
+  int init(int64_t len, void* data) {
+    int err = AX_SUCCESS;
+    if (len <= 0 || !is2n(len) || NULL == data)
+    {
+      err = AX_INVALID_ARGUMENT;
+    }
+    else if (0 != pthread_key_create(&key_, NULL))
+    {
+      err = AX_PTHREAD_KEY_CREATE_ERR;
+    }
+    else
+    {
+      len_ = len;
+      items_ = data;
+      memset(data, 0, calc_mem_usage(len));
+    }
+    return err;
+  }
+  void destroy() {
+    if (NULL != items_)
+    {
+      push_ = 1;
+      pop_ = 1;
+      size_ = 0;
+      items_ = NULL;
+      pthread_key_destroy(key_);
+    }
+  }
+  int64_t idx(int64_t x) { return x & (len_ - 1); }
   int push(void* data) {
     int err = AX_SUCCESS;
     Item* item = NULL;
@@ -72,38 +101,38 @@ public:
     {
       err = AX_INVALID_ARGUMENT;
     }
-    else if (NULL == (item = items_.get(FAA(&push_, 1))))
+    else if (NULL == items_)
     {
       err = AX_NOT_INIT;
     }
     else
     {
-      err = item->push(data);
+      err = items_[idx(FAA(&push_, 1))].push(data);
     }
     return err;
   }
 
   int pop(void*& data, const timespec* timeout) {
     int err = AX_SUCCESS;
-    int64_t& idx = ticket_.get();
-    Item* item = NULL;
-    if (idx == 0)
-    {
-      idx = FAA(&pop_, 1);
-    }
-    if (NULL == (item = items_.get(idx)))
+    int64_t cur_idx = pthread_getspecific(key_)?:FAA(&pop_, 1);
+    if (NULL == items_)
     {
       err = AX_NOT_INIT;
     }
-    else if (AX_SUCCESS == (err = item->pop(data, timeout)))
+    else if (AX_SUCCESS != (err = items_[idx(cur_idx)].pop(data, timeout)))
     {
-      idx = 0;
+      pthread_setspecific(key_, cur_idx);
+    }
+    else
+    {
+      pthread_setspecific(key_, 0);
     }
     return err;
   }
 private:
   int64_t push_ CACHE_ALIGNED;
   int64_t pop_ CACHE_ALIGNED;
-  TCValue ticket_;
-  FixedArray<Item> items_;
+  pthread_key_t key_;
+  int64_t len_ CACHE_ALIGNED;
+  Item** items_;
 };
