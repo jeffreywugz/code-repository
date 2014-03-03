@@ -1,5 +1,6 @@
 #ifndef __OB_AX_LOCK_H__
 #define __OB_AX_LOCK_H__
+#include "a0.h"
 
 struct SpinLock
 {
@@ -25,6 +26,7 @@ struct SpinLock
     {
       PAUSE();
     }
+    return true;
   }
   bool unlock() {
     return CAS(&lock_, 1, 0);

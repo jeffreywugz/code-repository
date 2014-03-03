@@ -1,8 +1,26 @@
 #include "ax.h"
+#include "echo_server.h"
 
 class AxApp
 {
 public:
+  int echo_server(int port) {
+    int err = AX_SUCCESS;
+    EchoServer* server = NULL;
+    if (NULL == (server = get_echo_server()))
+    {
+      err = AX_NO_MEM;
+    }
+    else if (AX_SUCCESS != (err = server->init(port, 1)))
+    {
+      DLOG(ERROR, "http server init fail, err=%d", err);
+    }
+    else
+    {
+      err = server->start();
+    }
+    return err;
+  }
   int bootstrap(const char* workdir) {
     int err = AX_SUCCESS;
     AxLogServer* server = NULL;
@@ -157,6 +175,10 @@ public:
     return err;
   }
 protected:
+  EchoServer* get_echo_server() {
+    static EchoServer server;
+    return &server;
+  }
   AxLogServer* get_server() {
     static AxLogServer server;
     return &server;
@@ -168,6 +190,7 @@ protected:
 };
 
 const char* __usages__ = "Usages:\n"
+  "\tax echo_server port\n"
   "\tax start workdir\n"
   "\tax bootstrap workdir\n"
   "\tax start_group leader_ip:leader_port ip1:port1,ip2:port2...\n"
@@ -186,6 +209,7 @@ int main(int argc, char** argv)
 {
   int err = AX_CMD_ARGS_NOT_MATCH;
   AxApp app;
+  define_cmd_call(app.echo_server, IntArg(port));
   define_cmd_call(app.bootstrap, StrArg(workdir));
   define_cmd_call(app.start, StrArg(workdir));
   define_cmd_call(app.start_group, StrArg(leader), StrArg(server_list));

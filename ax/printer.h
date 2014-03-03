@@ -1,9 +1,12 @@
+#ifndef __OB_AX_PRINTER_H__
+#define __OB_AX_PRINTER_H__
+#include "a0.h"
 
 class Printer
 {
 public:
   Printer(int64_t buf_size = 4096): buf_(NULL), limit_(0), pos_(0) {
-    char* buf = ax_malloc(buf_size);
+    char* buf = (char*)ax_malloc(buf_size);
     if (NULL != buf)
     {
       buf_ = buf;
@@ -35,9 +38,9 @@ public:
     va_list ap;
     va_start(ap, format);
     if (NULL != buf_ && limit_ > 0 && pos_ < limit_
-        && pos_ + (count = vsnprintf(buf_ + pos_, len_ - pos_, format, ap)) < len_)
+        && pos_ + (count = vsnprintf(buf_ + pos_, limit_ - pos_, format, ap)) < limit_)
     {
-      src = buf_ + pos_
+      src = buf_ + pos_;
       pos_ += count;
     }
     va_end(ap);
@@ -49,9 +52,9 @@ public:
     va_list ap;
     va_start(ap, format);
     if (NULL != buf_ && limit_ > 0 && pos_ < limit_
-        && pos_ + (count = vsnprintf(buf_ + pos_, len_ - pos_, format, ap)) < len_)
+        && pos_ + (count = vsnprintf(buf_ + pos_, limit_ - pos_, format, ap)) < limit_)
     {
-      src = buf_ + pos_
+      src = buf_ + pos_;
       pos_ += count;
     }
     va_end(ap);
@@ -69,10 +72,12 @@ char* __repr__(Printer& printer, T& t)
   return t.repr(printer);
 }
 
-Printer& get_tl_printer()
+inline Printer& get_tl_printer()
 {
   static Printer printer[AX_MAX_THREAD_NUM];
   return printer[itid()];
 }
 
 #define repr(t) __repr__(get_tl_printer(), t)
+
+#endif /* __OB_AX_PRINTER_H__ */

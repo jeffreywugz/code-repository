@@ -83,4 +83,3 @@ inline MLog& get_mlog() {
   static MLog mlog(getenv("mlog_path"));
   return mlog;
 }
-#define DLOG(prefix, format, ...) {get_tl_printer().reset(); get_mlog().append("[%ld] %s %s:%ld [%ld] " format "\n", get_us(), #prefix, __FILE__, __LINE__, pthread_self(), ##__VA_ARGS__); }

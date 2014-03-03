@@ -7,8 +7,7 @@ MALLOC_MOD_ITEM_DEF(AX_MALLOC_MOD_END)
 #ifndef __OB_AX_MALLOC_H__
 #define __OB_AX_MALLOC_H__
 
-#include "ax_define.h"
-#include "mcu.h"
+#include "a0.h"
 
 enum
 {
@@ -37,7 +36,7 @@ class MallocModSet
 public:
   enum {MOD_COUNT_LIMIT = AX_MALLOC_MOD_END };
   MallocModSet(): allocated_(0) {
-#define MALLOC_MOD_ITEM_DEF(id) set_mod_name(ObModIds::id, #id);
+#define MALLOC_MOD_ITEM_DEF(id) set_mod_name(id, #id);
 #include __FILE__
 #undef MALLOC_MOD_ITEM_DEF
   }
@@ -48,7 +47,7 @@ public:
   }
   void print_mod_memory_usage();
 private:
-  int64_t mod_update(int32_t mod_id, int64_t used) { return mods_[(mod_id >= 0 && mod_id < MOD_COUNT_LIMIT)? mod_id: 0].update(used); }
+  void mod_update(int32_t mod_id, int64_t used) { return mods_[(mod_id >= 0 && mod_id < MOD_COUNT_LIMIT)? mod_id: 0].update(used); }
   void set_mod_name(int32_t mod_id, const char* name) {
     if (mod_id >= 0 && mod_id < MOD_COUNT_LIMIT)
     {
@@ -67,6 +66,7 @@ public:
   {
     Block(int mod_id, int64_t size): mod_id_(mod_id), size_(size) {}
     ~Block() {}
+    int64_t get_alloc_size() const { return size_ + sizeof(*this); }
     int mod_id_;
     int64_t size_;
     char buf_[0];
@@ -85,14 +85,15 @@ public:
   }
 protected:
   Block* alloc_block(int64_t size, int mod_id) {
+    Block* block = NULL;
     if (size > 0)
     {
       int64_t alloc_size = size + sizeof(Block);
-      Block* block = malloc(alloc_size);
+      block = (Block*)malloc(alloc_size);
       if (NULL != block)
       {
-        mod_set_.update(mod_id, used);
-        new(block)Block(mod_id, size);
+        mod_set_.update(mod_id, size);
+        new(block) Block(mod_id, size);
       }
     }
     return block;
@@ -101,15 +102,12 @@ protected:
   {
     if (NULL != block)
     {
-      mod_set_.update(mod_id, -used);
+      mod_set_.update(block->mod_id_, -block->get_alloc_size());
       free(block);
     }
   }
 private:
   MallocModSet mod_set_;
 };
-
-void* ax_malloc(size_t size, int mod_id);
-void ax_free(void* p);
 
 #endif /* __OB_AX_MALLOC_H__ */

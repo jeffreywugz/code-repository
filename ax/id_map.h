@@ -6,14 +6,14 @@
 
 struct IdLock
 {
-  IdLock(id_t id): rwlock_(), id_(id) { rwlock_.wrlock(); }
+  IdLock(Id id): rwlock_(), id_(id) { rwlock_.wrlock(); }
   ~IdLock() {}
-  id_t born() {
-    id_t id = AL(id_);
+  Id born() {
+    Id id = AL(id_);
     rwlock_.wrunlock();
     return id;
   }
-  int inc_ref(id_t id) {
+  int inc_ref(Id id) {
     int err = AX_SUCCESS;
     if (id != AL(&id_))
     {
@@ -30,7 +30,7 @@ struct IdLock
     }
     return err;
   }
-  int dec_ref(id_t id) {
+  int dec_ref(Id id) {
     int err = AX_SUCCESS;
     if (id != AL(&id_))
     {
@@ -42,7 +42,7 @@ struct IdLock
     }
     return err;
   }
-  int reclaim(id_t old_id, id_t new_id) {
+  int reclaim(Id old_id, Id new_id) {
     int err = AX_SUCCESS;
     if (old_id != AL(&id_))
     {
@@ -64,12 +64,12 @@ struct IdLock
     return err;
   }
   RWLock rwlock_;
-  id_t id_;
+  Id id_;
 };
 
 class IDMap
 {
-  typedef uint64_t id_t;
+  typedef uint64_t Id;
   typedef void* value_t;
   struct Item
   {
@@ -99,7 +99,7 @@ public:
     }
     for(int64_t i = 0; AX_SUCCESS == err && i < capacity; i++)
     {
-      new(items_ + i)Item(i);
+      new(items_ + i)Item(i + capacity);
       err = free_list_.push(items_ + i);
     }
     if (AX_SUCCESS != err)
@@ -119,7 +119,7 @@ public:
   int64_t calc_mem_usage(int64_t capacity) { return free_list_.calc_mem_usage(capacity) + sizeof(Item) * capacity; }
   int64_t idx(int64_t x) { return x & (capacity_ - 1); }
 public:
-  int add(id_t& seq, value_t value) {
+  int add(Id& seq, value_t value) {
     int err = AX_SUCCESS;
     Item* item = NULL;
     if (AX_SUCCESS != (err = free_list_.pop(item)))
@@ -131,7 +131,7 @@ public:
     }
     return err;
   }
-  int del(id_t id, value_t& value) {
+  int del(Id id, value_t& value) {
     int err = AX_SUCCESS;
     Item* item = NULL;
     if (NULL == items_)
@@ -147,7 +147,7 @@ public:
     }
     return err;
   }
-  int fetch(id_t id, value_t& value) const {
+  int fetch(Id id, value_t& value) const {
     int err = AX_SUCCESS;
     Item* item = NULL;
     if (NULL == items_)
@@ -162,7 +162,7 @@ public:
     }
     return err;
   }
-  int revert(id_t id) {
+  int revert(Id id) {
     int err = AX_SUCCESS;
     if (NULL == items_)
     {

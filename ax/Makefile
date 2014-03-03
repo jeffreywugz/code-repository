@@ -1,7 +1,9 @@
 target = ax
-cxx = g++
-ld = g++
-cpp = cpp
+gcc-bin-dir = /home/yuanqi.xhf/gcc/bin
+run-args = echo_server 1234
+cxx = $(gcc-bin-dir)/g++
+ld = $(gcc-bin-dir)/g++
+cpp = $(cxx) -E 
 cxxflags = -Wall -Werror -g
 ldflags = -lpthread
 .PHONY: all run clean  dep
@@ -9,13 +11,13 @@ ldflags = -lpthread
 srcs= $(wildcard *.cpp)
 objs= $(patsubst %.cpp,%.o,$(srcs))
 
-all: $(target)
+all: test
+test: $(target)
+	./$(target) $(run-args)
 $(target): $(objs)
 	$(ld) -o $@ $(ldflags) $^
 %.o: %.cpp
 	$(cxx) -c  $(cxxflags) $<
-run: $(target)
-	./$(target)
 clean:
 	rm -rf $(target) *.o *~ .dep
 dep:
