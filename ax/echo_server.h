@@ -1,7 +1,5 @@
 #ifndef __OB_AX_ECHO_SERVER_H__
 #define __OB_AX_ECHO_SERVER_H__
-
-#include "ax_common.h"
 #include "nio.h"
 
 struct EchoSockHandler: public SockHandler

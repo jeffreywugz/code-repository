@@ -1,15 +1,16 @@
 #ifndef __OB_AX_ID_MAP_H__
 #define __OB_AX_ID_MAP_H__
 
+#include "a0.h"
 #include "spin_queue.h"
-#define IDMAP_INVALID_ID 0
+#include "lock.h"
 
 struct IdLock
 {
   IdLock(Id id): rwlock_(), id_(id) { rwlock_.wrlock(); }
   ~IdLock() {}
   Id born() {
-    Id id = AL(id_);
+    Id id = AL(&id_);
     rwlock_.wrunlock();
     return id;
   }
@@ -82,7 +83,7 @@ public:
   IDMap(): capacity_(0), items_(NULL) {}
   ~IDMap(){ destroy(); }
 public:
-  int init(int64_t capacity, void* buf) {
+  int init(int64_t capacity, char* buf) {
     int err = AX_SUCCESS;
     MemChunkCutter cutter(calc_mem_usage(capacity), buf);
     if (capacity <= 0 || !is2n(capacity) || NULL == buf)
@@ -94,7 +95,7 @@ public:
     else
     {
       capacity_ = capacity;
-      items_ = cutter.alloc(sizeof(Item) * capacity_);
+      items_ = (Item*)cutter.alloc(sizeof(Item) * capacity_);
       memset(items_, 0, capacity * sizeof(Item));
     }
     for(int64_t i = 0; AX_SUCCESS == err && i < capacity; i++)
@@ -122,7 +123,7 @@ public:
   int add(Id& seq, value_t value) {
     int err = AX_SUCCESS;
     Item* item = NULL;
-    if (AX_SUCCESS != (err = free_list_.pop(item)))
+    if (AX_SUCCESS != (err = free_list_.pop((void*&)item)))
     {}
     else
     {
@@ -147,7 +148,7 @@ public:
     }
     return err;
   }
-  int fetch(Id id, value_t& value) const {
+  int fetch(Id id, value_t& value) {
     int err = AX_SUCCESS;
     Item* item = NULL;
     if (NULL == items_)
@@ -177,3 +178,4 @@ private:
   int64_t capacity_;
   Item* items_;
 };
+#endif /* __OB_AX_ID_MAP_H__ */

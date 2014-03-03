@@ -1,6 +1,6 @@
 #ifndef __OB_AX_NIO_H__
 #define __OB_AX_NIO_H__
-#include "ax_common.h"
+#include "common.h"
 #include <sys/epoll.h>
 
 enum {
@@ -32,7 +32,7 @@ struct SockHandler
     return this;
   }
   bool try_lock() { return lock_.try_lock(); }
-  void unlock() { return lock_.unlock(); }
+  void unlock() { lock_.unlock(); }
   SpinLock lock_;
   Id id_;
   int flag_;
@@ -41,7 +41,7 @@ struct SockHandler
   epoll_event event_;
 };
 
-int make_fd_non_blocking(int fd)
+inline int make_fd_non_blocking(int fd)
 {
   int err = 0;
   int flags = 0;
@@ -52,7 +52,7 @@ int make_fd_non_blocking(int fd)
   return err;
 }
 
-struct sockaddr_in* make_sockaddr(struct sockaddr_in* sin, in_addr_t ip, int port)
+inline struct sockaddr_in* make_sockaddr(struct sockaddr_in* sin, in_addr_t ip, int port)
 {
   if (NULL != sin)
   {
@@ -62,29 +62,13 @@ struct sockaddr_in* make_sockaddr(struct sockaddr_in* sin, in_addr_t ip, int por
   }
   return sin;
 }
-int make_inet_socket(int type, in_addr_t ip, int port)
-{
-  int err = 0;
-  int fd = -1;
-  struct sockaddr_in sin;
-  if ((fd = socket(AF_INET, type, 0)) < 0
-      || bind(fd, make_sockaddr(&sin, ip, port),sizeof(sin)) != 0)
-  {
-    err = -errno;
-  }
-  if (fd > 0 && 0 != err)
-  {
-    close(fd);
-  }
-  return 0 == err? fd: -1;
-}
 
-struct epoll_event* set_epoll_event(epoll_event* event, uint32_t event_flag, Id id)
+inline struct epoll_event* set_epoll_event(epoll_event* event, uint32_t event_flag, Id id)
 {
   if (NULL != event)
   {
-    event.events = event_flag;
-    event.data.u64 = id;
+    event->events = event_flag;
+    event->data.u64 = id;
   }
   return event;
 }
@@ -92,10 +76,11 @@ struct epoll_event* set_epoll_event(epoll_event* event, uint32_t event_flag, Id 
 class Nio
 {
 public:
+  typedef struct epoll_event Event;
   Nio(): evfd_(-1), epfd_(-1), handler_(NULL) {}
   ~Nio() { destroy(); }
 public:
-  int init(SockHandler* handler, int64_t capacity, void* buf) {
+  int init(SockHandler* handler, int64_t capacity, char* buf) {
     int err = AX_SUCCESS;
     MemChunkCutter cutter(calc_mem_usage(capacity), buf);
     if (capacity <= 0 || !is2n(capacity) || NULL == handler || NULL == buf)
@@ -546,7 +531,7 @@ private:
   SpinQueue ev_free_list_;
   FutexQueue ev_queue_;
   CacheIndex out_sock_table_;
-  IdMap sock_map_;
+  IDMap sock_map_;
   SpinQueue rearm_queue_;
   int evfd_;
   int epfd_;

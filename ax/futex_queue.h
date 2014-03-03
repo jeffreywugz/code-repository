@@ -1,8 +1,17 @@
-#include "mcu.h"
+#ifndef __OB_AX_FUTEX_QUEUE_H__
+#define __OB_AX_FUTEX_QUEUE_H__
+#include "a0.h"
 
 class FutexQueue
 {
 public:
+  static int dec_if_gt0(int* p)
+  {
+    int x = 0;
+    while((x = *p) > 0 && !__sync_bool_compare_and_swap(p, x, x - 1))
+      ;
+    return x;
+  }
   struct Item
   {
     Item(int64_t seq): n_waiters_(0), stock_(0), data_(NULL) { UNUSED(seq); }
@@ -62,12 +71,12 @@ public:
     void* data_;
   };
 public:
-  FutexQueue(): push_(1), pop_(1), size_(0), items_(NULL) {}
+  FutexQueue(): push_(1), pop_(1), capacity_(0), items_(NULL) {}
   ~FutexQueue() { destroy(); }
-  static int64_t calc_mem_usage(int64_t size) { return sizeof(Item) * size; }
-  int init(int64_t len, void* data) {
+  static int64_t calc_mem_usage(int64_t capacity) { return sizeof(Item) * capacity; }
+  int init(int64_t capacity, char* data) {
     int err = AX_SUCCESS;
-    if (len <= 0 || !is2n(len) || NULL == data)
+    if (capacity <= 0 || !is2n(capacity) || NULL == data)
     {
       err = AX_INVALID_ARGUMENT;
     }
@@ -77,9 +86,9 @@ public:
     }
     else
     {
-      len_ = len;
-      items_ = data;
-      memset(data, 0, calc_mem_usage(len));
+      capacity_ = capacity;
+      items_ = (Item*)data;
+      memset(data, 0, calc_mem_usage(capacity));
     }
     return err;
   }
@@ -88,15 +97,14 @@ public:
     {
       push_ = 1;
       pop_ = 1;
-      size_ = 0;
+      capacity_ = 0;
       items_ = NULL;
-      pthread_key_destroy(key_);
+      pthread_key_delete(key_);
     }
   }
-  int64_t idx(int64_t x) { return x & (len_ - 1); }
+  int64_t idx(int64_t x) { return x & (capacity_ - 1); }
   int push(void* data) {
     int err = AX_SUCCESS;
-    Item* item = NULL;
     if (NULL == data)
     {
       err = AX_INVALID_ARGUMENT;
@@ -114,14 +122,14 @@ public:
 
   int pop(void*& data, const timespec* timeout) {
     int err = AX_SUCCESS;
-    int64_t cur_idx = pthread_getspecific(key_)?:FAA(&pop_, 1);
+    int64_t cur_idx = ((int64_t)pthread_getspecific(key_))?:FAA(&pop_, 1);
     if (NULL == items_)
     {
       err = AX_NOT_INIT;
     }
     else if (AX_SUCCESS != (err = items_[idx(cur_idx)].pop(data, timeout)))
     {
-      pthread_setspecific(key_, cur_idx);
+      pthread_setspecific(key_, (void*)cur_idx);
     }
     else
     {
@@ -133,6 +141,8 @@ private:
   int64_t push_ CACHE_ALIGNED;
   int64_t pop_ CACHE_ALIGNED;
   pthread_key_t key_;
-  int64_t len_ CACHE_ALIGNED;
-  Item** items_;
+  int64_t capacity_ CACHE_ALIGNED;
+  Item* items_;
 };
+#endif /* __OB_AX_FUTEX_QUEUE_H__ */
+

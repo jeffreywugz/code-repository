@@ -1,4 +1,7 @@
-uint32_t murmurhash2(const void *key, int32_t len, uint32_t seed)
+#ifndef __OB_AX_HASH_FUNC_H__
+#define __OB_AX_HASH_FUNC_H__
+
+inline uint32_t murmurhash2(const void *key, int32_t len, uint32_t seed)
 {
   // 'm' and 'r' are mixing constants generated offline.
   // They're not really 'magic', they just happen to work well.
@@ -45,3 +48,4 @@ uint32_t murmurhash2(const void *key, int32_t len, uint32_t seed)
   return h;
 }
 
+#endif /* __OB_AX_HASH_FUNC_H__ */

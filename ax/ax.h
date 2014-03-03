@@ -1,6 +1,6 @@
 #ifndef __OB_AX_AX_H__
 #define __OB_AX_AX_H__
-#include "ax_common.h"
+#include "common.h"
 
 class AxLogServer
 {

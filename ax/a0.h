@@ -1,5 +1,3 @@
-#ifndef __OB_AX_A0_H__
-#define __OB_AX_A0_H__
 #ifdef ERRNO_DEF
 ERRNO_DEF(SUCCESS, 0, "success")
 ERRNO_DEF(FATAL_ERR, -1, "fatal")
@@ -26,6 +24,7 @@ ERRNO_DEF(EPOLL_WAIT_ERR, -1001, "epoll wait fail")
 ERRNO_DEF(EPOLL_CTL_ERR, -1002, "epoll ctl fail")
 ERRNO_DEF(SOCK_CREATE_ERR, -1010, "sock create fail")
 ERRNO_DEF(EVENTFD_READ_ERR, -1020, "eventfd read fail")
+ERRNO_DEF(PTHREAD_KEY_CREATE_ERR, -1040, "pthread_key_create fail")
 #endif
 
 #ifdef PCODE_DEF
@@ -35,8 +34,9 @@ PCODE_DEF(SET_RUN_MODE, 3, "set run mode")
 PCODE_DEF(INSPECT, 4, "inspect")
 #endif
 
-#ifndef __OB_AX_AX_COMMON_H__
-#define __OB_AX_AX_COMMON_H__
+#ifndef __OB_AX_A0_H__
+#define __OB_AX_A0_H__
+
 #define ERRNO_DEF(name, value, desc) const static int AX_ ## name = value; // desc
 #include __FILE__
 #undef ERRNO_DEF
@@ -59,6 +59,7 @@ PCODE_DEF(INSPECT, 4, "inspect")
 #define DIO_ALIGN_SIZE 512
 #define arrlen(x) (sizeof(x)/sizeof(x[0]))
 
+#define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -73,6 +74,61 @@ PCODE_DEF(INSPECT, 4, "inspect")
 #include <sys/syscall.h>
 #include <linux/futex.h>
 #include <new>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+typedef uint64_t Id;
+#define INVALID_ID (~0ul)
+// basic struct define
+struct Buffer
+{
+  Buffer(): limit_(0), used_(0), buf_(NULL) {}
+  ~Buffer() {}
+  int parse(const char* spec) {
+    int err = AX_SUCCESS;
+    limit_ = used_ = strlen(spec);
+    buf_ = (char*)spec;
+    return err;
+  }
+
+  void dump() {
+    fprintf(stderr, "dump buffer: limit=%ld used=%ld", limit_, used_);
+  }
+  uint64_t limit_;
+  uint64_t used_;
+  char* buf_;
+};
+
+struct RecordHeader
+{
+  uint32_t magic_;
+  uint32_t len_;
+  uint64_t checksum_;
+};
+
+struct Server
+{
+  Server(): ip_(0), port_(0) {}
+  ~Server() {}
+  int parse(const char* spec) {
+    int err = AX_SUCCESS;
+    char* ip = NULL;
+    if (2 != sscanf(spec, "%as:%u", &ip, &port_))
+    {
+      err = AX_INVALID_ARGUMENT;
+    }
+    else
+    {
+      ip_ = inet_addr(ip);
+    }
+    free(ip);
+    return err;
+  }
+  uint32_t ip_;
+  uint32_t port_;
+};
+
 #define futex(...) syscall(SYS_futex,__VA_ARGS__)
 
 inline int futex_wake(volatile int* p, int val)
@@ -118,6 +174,34 @@ inline int64_t get_us()
   struct timeval time_val;
   gettimeofday(&time_val, NULL);
   return time_val.tv_sec*1000000 + time_val.tv_usec;
+}
+
+struct MemChunkCutter
+{
+  MemChunkCutter(int64_t limit, char* buf): limit_(limit), used_(0), buf_(buf) {}
+  ~MemChunkCutter() {}
+  char* alloc(int64_t size) {
+    char* p = NULL;
+    if (NULL == buf_)
+    {}
+    else if (used_ + size > limit_)
+    {}
+    else
+    {
+      p = buf_ + used_;
+      used_ += size;
+    }
+    return p;
+  }
+  int64_t limit_;
+  int64_t used_;
+  char* buf_;
+};
+
+template<typename T, typename Allocator>
+int init_container(T& t, int64_t capacity, Allocator& allocator)
+{
+  return t.init(capacity, allocator.alloc(t.calc_mem_usage(capacity)));
 }
 
 void* ax_malloc(size_t size, int mod_id=0);

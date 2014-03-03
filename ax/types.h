@@ -1,39 +1,33 @@
-typedef uint64_t Id;
-#define INVALID_ID (~0UL)
-// basic struct define
-struct Buffer
-{
-  Buffer(): limit_(0), used_(0), buf_(NULL) {}
-  ~Buffer() {}
-  int parse(const char* spec);
-  void dump();
-  uint64_t limit_;
-  uint64_t used_;
-  char* buf_;
-};
+#ifndef __OB_AX_TYPES_H__
+#define __OB_AX_TYPES_H__
 
-struct RecordHeader
-{
-  uint32_t magic_;
-  uint32_t len_;
-  uint64_t checksum_;
-};
-
-struct Server
-{
-  Server(): ip_(0), port_(0) {}
-  ~Server() {}
-  int parse(const char* spec);
-  uint32_t ip_;
-  uint32_t port_;
-};
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <string.h>
 
 #define MAX_SERVER_COUNT 8
 struct ServerList
 {
   ServerList(): count_(0) {}
   ~ServerList() {}
-  int parse(const char* spec);
+  int parse(const char* spec) {
+    int err = AX_SUCCESS;
+    char* str = cstrdup(__alloca__, spec);
+    StrTok tokenizer(str, ",");
+    for(char* tok = NULL; AX_SUCCESS == err && NULL != (tok = tokenizer.next()); )
+    {
+      if (count_ >= MAX_SERVER_COUNT)
+      {
+        err = AX_SIZE_OVERFLOW;
+      }
+      else
+      {
+        err = servers_[count_++].parse(tok);
+      }
+    }
+    return err;
+  }
   int count_;
   Server servers_[MAX_SERVER_COUNT];
 };
@@ -44,7 +38,14 @@ struct Cursor
 {
   Cursor(): term_(), pos_() {}
   ~Cursor() {}
-  int parse(const char* spec);
+  int parse(const char* spec) {
+    int err = AX_SUCCESS;
+    if (2 != scanf(spec, "%lu:%lu", &term_, &pos_))
+    {
+      err = AX_INVALID_ARGUMENT;
+    }
+    return err;
+  }
   Term term_;
   Pos pos_;
 };
@@ -94,4 +95,4 @@ struct LogEntry
   Term term_;
   Pos pos_;
 };
-
+#endif /* __OB_AX_TYPES_H__ */
