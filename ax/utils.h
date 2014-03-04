@@ -1,6 +1,6 @@
 #ifndef __OB_AX_AX_UTILS_H__
 #define __OB_AX_AX_UTILS_H__
-#include "common.h"
+#include "a0.h"
 
 class Alloca
 {

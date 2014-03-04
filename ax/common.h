@@ -11,8 +11,9 @@
 #include "malloc.h"
 #include "printer.h"
 #include "mlog.h"
-#define DLOG(prefix, format, ...) {get_tl_printer().reset(); get_mlog().append("[%ld] %s %s:%ld [%ld] " format "\n", get_us(), #prefix, __FILE__, __LINE__, pthread_self(), ##__VA_ARGS__); }
+#define MLOG(prefix, format, ...) {get_tl_printer().reset(); get_mlog().append("[%ld] %s %s:%ld [%ld] " format "\n", get_us(), #prefix, __FILE__, __LINE__, pthread_self(), ##__VA_ARGS__); }
 
+#define ERR(err) MLOG(ERROR, "err=%d syscall: %s", err, strerror(errno))
 #include "utils.h"
 #include "types.h"
 #endif /* __OB_AX_AX_COMMON_H__ */

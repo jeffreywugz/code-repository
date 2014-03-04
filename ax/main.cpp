@@ -13,7 +13,7 @@ public:
     }
     else if (AX_SUCCESS != (err = server->init(port, 1)))
     {
-      DLOG(ERROR, "http server init fail, err=%d", err);
+      MLOG(ERROR, "echo server init fail, err=%d", err);
     }
     else
     {
@@ -30,11 +30,11 @@ public:
     }
     else if (AX_SUCCESS != (err = server->init(workdir)))
     {
-      DLOG(ERROR, "server init fail, err=%d", err);
+      MLOG(ERROR, "server init fail, err=%d", err);
     }
     else if (AX_SUCCESS != (err = server->bootstrap()))
     {
-      DLOG(ERROR, "server bootstrap fail, err=%d", err);
+      MLOG(ERROR, "server bootstrap fail, err=%d", err);
     }
     return err;
   }
@@ -47,11 +47,11 @@ public:
     }
     else if (AX_SUCCESS != (err = server->init(workdir)))
     {
-      DLOG(ERROR, "server init fail, err=%d", err);
+      MLOG(ERROR, "server init fail, err=%d", err);
     }
     else if (AX_SUCCESS != (err = server->start()))
     {
-      DLOG(ERROR, "server start fail, err=%d", err);
+      MLOG(ERROR, "server start fail, err=%d", err);
     }
     return err;
   }
@@ -63,11 +63,11 @@ public:
     ServerList server_list;
     if (AX_SUCCESS != (err = parse(leader, leader_spec)))
     {
-      DLOG(ERROR, "invalid leader: %s", leader_spec);
+      MLOG(ERROR, "invalid leader: %s", leader_spec);
     }
     else if (AX_SUCCESS != (err = parse(server_list, server_list_spec)))
     {
-      DLOG(ERROR, "invalid server_list: %s", server_list_spec);
+      MLOG(ERROR, "invalid server_list: %s", server_list_spec);
     }
     else if (NULL == (client = get_client()))
     {
@@ -75,11 +75,11 @@ public:
     }
     else if (AX_SUCCESS != (err = client->init()))
     {
-      DLOG(ERROR, "client init fail, err=%d", err);
+      MLOG(ERROR, "client init fail, err=%d", err);
     }
     else if (AX_SUCCESS != (err = client->start_group(leader, server_list)))
     {
-      DLOG(ERROR, "client start_group fail, err=%d", err);
+      MLOG(ERROR, "client start_group fail, err=%d", err);
     }
     return err;
   }
@@ -90,11 +90,11 @@ public:
     ServerList server_list;
     if (AX_SUCCESS != (err = parse(leader, leader_spec)))
     {
-      DLOG(ERROR, "invalid leader: %s", leader_spec);
+      MLOG(ERROR, "invalid leader: %s", leader_spec);
     }
     else if (AX_SUCCESS != (err = parse(server_list, server_list_spec)))
     {
-      DLOG(ERROR, "invalid server_list: %s", server_list_spec);
+      MLOG(ERROR, "invalid server_list: %s", server_list_spec);
     }
     else if (NULL == (client = get_client()))
     {
@@ -102,11 +102,11 @@ public:
     }
     else if (AX_SUCCESS != (err = client->init()))
     {
-      DLOG(ERROR, "client init fail, err=%d", err);
+      MLOG(ERROR, "client init fail, err=%d", err);
     }
     else if (AX_SUCCESS != (err = client->stop_group(leader, server_list)))
     {
-      DLOG(ERROR, "client stop_group fail, err=%d", err);
+      MLOG(ERROR, "client stop_group fail, err=%d", err);
     }
     return err;
   }
@@ -118,15 +118,15 @@ public:
     Buffer content;
     if (AX_SUCCESS != (err = parse(leader, leader_spec)))
     {
-      DLOG(ERROR, "invalid leader: %s", leader_spec);
+      MLOG(ERROR, "invalid leader: %s", leader_spec);
     }
     else if (AX_SUCCESS != (err = parse(cursor, cursor_spec)))
     {
-      DLOG(ERROR, "invalid cursor_spec: %s", cursor_spec);
+      MLOG(ERROR, "invalid cursor_spec: %s", cursor_spec);
     }
     else if (AX_SUCCESS != (err = parse(content, content_spec)))
     {
-      DLOG(ERROR, "invalid content_spec: %s", content_spec);
+      MLOG(ERROR, "invalid content_spec: %s", content_spec);
     }
     else if (NULL == (client = get_client()))
     {
@@ -134,11 +134,11 @@ public:
     }
     else if (AX_SUCCESS != (err = client->init()))
     {
-      DLOG(ERROR, "client init fail, err=%d", err);
+      MLOG(ERROR, "client init fail, err=%d", err);
     }
     else if (AX_SUCCESS != (err = client->propose(leader, cursor, content)))
     {
-      DLOG(ERROR, "client stop_group fail, err=%d", err);
+      MLOG(ERROR, "client stop_group fail, err=%d", err);
     }
     return err;
   }
@@ -150,11 +150,11 @@ public:
     Buffer content;
     if (AX_SUCCESS != (err = parse(server, server_spec)))
     {
-      DLOG(ERROR, "invalid server: %s", server_spec);
+      MLOG(ERROR, "invalid server: %s", server_spec);
     }
     else if (AX_SUCCESS != (err = parse(cursor, cursor_spec)))
     {
-      DLOG(ERROR, "invalid cursor_spec: %s", cursor_spec);
+      MLOG(ERROR, "invalid cursor_spec: %s", cursor_spec);
     }
     else if (NULL == (client = get_client()))
     {
@@ -162,11 +162,11 @@ public:
     }
     else if (AX_SUCCESS != (err = client->init()))
     {
-      DLOG(ERROR, "client init fail, err=%d", err);
+      MLOG(ERROR, "client init fail, err=%d", err);
     }
     else if (AX_SUCCESS != (err = client->read(server, cursor, content)))
     {
-      DLOG(ERROR, "client stop_group fail, err=%d", err);
+      MLOG(ERROR, "client stop_group fail, err=%d", err);
     }
     else
     {
@@ -199,7 +199,7 @@ const char* __usages__ = "Usages:\n"
   "\tax read ip:port term:pos -> \n";
 
 #include "cmd_args_parser.h"
-#define report_error(err, ...) if (AX_SUCCESS != err)DLOG(ERROR, __VA_ARGS__);
+#define report_error(err, ...) if (AX_SUCCESS != err)MLOG(ERROR, __VA_ARGS__);
 #define define_cmd_call(cmd, ...) if (AX_CMD_ARGS_NOT_MATCH == err && AX_CMD_ARGS_NOT_MATCH != (err = CmdCall(argc, argv, cmd, __VA_ARGS__):AX_CMD_ARGS_NOT_MATCH)) \
   { \
     report_error(err,  "%s() execute fail, ret=%d", #cmd, err);  \

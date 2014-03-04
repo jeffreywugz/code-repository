@@ -128,7 +128,7 @@ public:
     else
     {
       item->value_ = value;
-      err = item->idlock_.born();
+      seq = item->idlock_.born();
     }
     return err;
   }

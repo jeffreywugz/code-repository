@@ -7,7 +7,8 @@ ERRNO_DEF(NO_MEM, -4, "no memory")
 ERRNO_DEF(INIT_TWICE, -5, "init twice")
 ERRNO_DEF(NOT_INIT, -6, "not init")
 ERRNO_DEF(EAGAIN, -7, "resource busy")
-ERRNO_DEF(IO_ERR, -9, "io error")
+ERRNO_DEF(NOT_SUPPORT, -9, "io error")
+ERRNO_DEF(IO_ERR, -10, "not support")
 ERRNO_DEF(SIZE_OVERFLOW, -20, "array size overflow")
 ERRNO_DEF(BUF_OVERFLOW, -21, "buf size overflow")
 ERRNO_DEF(QUEUE_OVERFLOW, -22, "queue size overflow")
@@ -23,8 +24,12 @@ ERRNO_DEF(EPOLL_CREATE_ERR, -1000, "epoll create fail")
 ERRNO_DEF(EPOLL_WAIT_ERR, -1001, "epoll wait fail")
 ERRNO_DEF(EPOLL_CTL_ERR, -1002, "epoll ctl fail")
 ERRNO_DEF(SOCK_CREATE_ERR, -1010, "sock create fail")
-ERRNO_DEF(EVENTFD_READ_ERR, -1020, "eventfd read fail")
+ERRNO_DEF(ACCEPT_ERR, -1011, "sock accept fail")
+ERRNO_DEF(GET_SOCKOPT_ERR, -1011, "get sockopt fail")
+ERRNO_DEF(EVENTFD_CREATE_ERR, -1020, "eventfd create fail")
+ERRNO_DEF(EVENTFD_IO_ERR, -1021, "eventfd create fail")
 ERRNO_DEF(PTHREAD_KEY_CREATE_ERR, -1040, "pthread_key_create fail")
+ERRNO_DEF(FCNTL_ERR, -1100, "fcntl fail")
 #endif
 
 #ifdef PCODE_DEF
@@ -111,6 +116,7 @@ struct Server
 {
   Server(): ip_(0), port_(0) {}
   ~Server() {}
+  bool is_valid() const { return ip_ != 0 && port_ > 0; }
   int parse(const char* spec) {
     int err = AX_SUCCESS;
     char* ip = NULL;

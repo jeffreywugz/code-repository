@@ -12,6 +12,13 @@ public:
       ;
     return x;
   }
+
+  static struct timespec* make_timespec(struct timespec* ts, int64_t us)
+  {
+    ts->tv_sec = us/1000000;
+    ts->tv_nsec = 1000 * (us % 1000000);
+    return ts;
+  }
   struct Item
   {
     Item(int64_t seq): n_waiters_(0), stock_(0), data_(NULL) { UNUSED(seq); }
@@ -36,7 +43,7 @@ public:
       }
       return err;
     }
-    int pop(void*& data, const timespec* timeout) {
+    int pop(void*& data, timespec* timeout) {
       int err = AX_SUCCESS;
       int32_t stock = 0;
       if ((stock = dec_if_gt0(&stock_)) > 0)
@@ -120,14 +127,16 @@ public:
     return err;
   }
 
-  int pop(void*& data, const timespec* timeout) {
+  int pop(void*& data, int64_t timeout_us) {
     int err = AX_SUCCESS;
     int64_t cur_idx = ((int64_t)pthread_getspecific(key_))?:FAA(&pop_, 1);
+    timespec timeout;
+    make_timespec(&timeout, timeout_us);
     if (NULL == items_)
     {
       err = AX_NOT_INIT;
     }
-    else if (AX_SUCCESS != (err = items_[idx(cur_idx)].pop(data, timeout)))
+    else if (AX_SUCCESS != (err = items_[idx(cur_idx)].pop(data, &timeout)))
     {
       pthread_setspecific(key_, (void*)cur_idx);
     }

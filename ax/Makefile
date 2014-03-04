@@ -4,9 +4,9 @@ run-args = echo_server 1234
 cxx = $(gcc-bin-dir)/g++
 ld = $(gcc-bin-dir)/g++
 cpp = $(cxx) -E 
-cxxflags = -Wall -Werror -g
-ldflags = -lpthread
-.PHONY: all run clean  dep
+cxxflags = -Wall -Werror -g -fno-inline-functions
+ldflags = -g -lpthread
+.PHONY: all run clean dep
 
 srcs= $(wildcard *.cpp)
 objs= $(patsubst %.cpp,%.o,$(srcs))
@@ -21,7 +21,7 @@ $(target): $(objs)
 clean:
 	rm -rf $(target) *.o *~ .dep
 dep:
-	(for f in $(srcs);do echo -n "";$(cpp) -M -MM -MG $$f;done) >> .dep
+	(for f in $(srcs); do echo -n ""; $(cpp) -M -MM -MG $$f; done) >> .dep
 
 ### Dependencies:
 -include .dep

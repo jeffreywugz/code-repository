@@ -31,7 +31,7 @@ public:
 public:
   CacheIndex(): capacity_(0), slots_(NULL) {}
   ~CacheIndex() { destroy(); }
-  int64_t calc_mem_usage(int64_t capacity){ return free_items_.calc_mem_usage(capacity) + sizeof(Item) * capacity_ + sizeof(Slot) * capacity_; }
+  int64_t calc_mem_usage(int64_t capacity){ return free_items_.calc_mem_usage(capacity) + sizeof(Item) * capacity + sizeof(Slot) * capacity; }
   int init(int64_t capacity, char* buf) {
     int err = AX_SUCCESS;
     MemChunkCutter cutter(calc_mem_usage(capacity), buf);

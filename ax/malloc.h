@@ -89,7 +89,7 @@ protected:
     if (size > 0)
     {
       int64_t alloc_size = size + sizeof(Block);
-      block = (Block*)malloc(alloc_size);
+      block = (Block*)::malloc(alloc_size);
       if (NULL != block)
       {
         mod_set_.update(mod_id, size);
@@ -103,7 +103,7 @@ protected:
     if (NULL != block)
     {
       mod_set_.update(block->mod_id_, -block->get_alloc_size());
-      free(block);
+      ::free(block);
     }
   }
 private:

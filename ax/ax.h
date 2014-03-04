@@ -30,7 +30,7 @@ public:
     }
     else
     {
-      DLOG(INFO, "log_server init succ, workdir=%s", workdir_);
+      MLOG(INFO, "log_server init succ, workdir=%s", workdir_);
     }
     return err;
   }
