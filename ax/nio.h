@@ -117,6 +117,10 @@ public:
     {
       handler_ = handler;
     }
+    for(int64_t i = 0; AX_SUCCESS == err && i < capacity; i++)
+    {
+      err = ev_free_list_.push(cutter.alloc(sizeof(Event)));
+    }
     if (AX_SUCCESS != err)
     {}
     else if (AX_SUCCESS != (err = create_epoll_fd()))
@@ -126,10 +130,6 @@ public:
     else if (AX_SUCCESS != (err = create_event_fd()))
     {
       ERR(err);
-    }
-    for(int64_t i = 0; AX_SUCCESS == err && i < capacity; i++)
-    {
-      err = ev_free_list_.push(cutter.alloc(sizeof(Event)));
     }
     if (AX_SUCCESS != err)
     {
@@ -164,10 +164,13 @@ public:
     Event* event = NULL;
     SockHandler* sock = NULL;
     Id id = INVALID_ID;
-    if (AX_SUCCESS != (err = ev_queue_.pop((void*&)event, timeout_us)))
+    if (AX_SUCCESS != (err = ev_queue_.pop((void*&)event, timeout_us))
+        && AX_EAGAIN != err)
     {
       ERR(err);
     }
+    else if (AX_SUCCESS != err)
+    {}
     else if (AX_SUCCESS != (err = sock_map_.fetch((id = event->data.u64), (void*&)sock)))
     {
       ERR(err);

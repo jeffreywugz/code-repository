@@ -32,7 +32,7 @@ class EchoServer
 {
 public:
   typedef EchoSockHandler Sock;
-  EchoServer(): stop_(false) {}
+    EchoServer(): stop_(false), thread_num_(0) {}
   ~EchoServer(){}
 public:
   int init(int port, int thread_num) {
@@ -42,6 +42,11 @@ public:
     if (AX_SUCCESS != (err = nio_.init(sock, capacity, (char*)ax_malloc(nio_.calc_mem_usage(capacity)))))
     {
       MLOG(ERROR, "nio.init()=>%d", err);
+    }
+    else
+    {
+      thread_num_ = thread_num;
+      MLOG(INFO, "echo_server init: port=%d thread_num=%ld", port, thread_num);
     }
     return err;
   }
@@ -56,14 +61,14 @@ public:
     int sys_err = 0;
     int err = AX_SUCCESS;
     pthread_t thread[32];
-    for(int64_t i = 0; i < (int64_t)arrlen(thread); i++) {
+    for(int64_t i = 0; i < min(thread_num_, (int64_t)arrlen(thread)); i++) {
       if (0 != (sys_err = pthread_create(thread + i, NULL, (void* (*)(void*))thread_func, (void*)this)))
       {
         err = AX_FATAL_ERR;
         MLOG(ERROR, "pthread_create fail, err=%d", sys_err);
       }
     }
-    for(int64_t i = 0; i < (int64_t)arrlen(thread); i++) {
+    for(int64_t i = 0; i < min(thread_num_, (int64_t)arrlen(thread)); i++) {
       pthread_join(thread[i], NULL);
     }
     return err;
@@ -73,6 +78,7 @@ public:
   }
 private:
   bool stop_;
+  int64_t thread_num_;
   Nio nio_;
 };
 

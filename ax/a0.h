@@ -182,6 +182,11 @@ inline int64_t get_us()
   return time_val.tv_sec*1000000 + time_val.tv_usec;
 }
 
+inline int64_t min(int64_t x, int64_t y)
+{
+  return ((x > y)? y: x);
+}
+
 struct MemChunkCutter
 {
   MemChunkCutter(int64_t limit, char* buf): limit_(limit), used_(0), buf_(buf) {}

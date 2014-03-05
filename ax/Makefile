@@ -1,8 +1,10 @@
 target = ax
 gcc-bin-dir = /home/yuanqi.xhf/gcc/bin
 run-args = echo_server 1234
-cxx = $(gcc-bin-dir)/g++
-ld = $(gcc-bin-dir)/g++
+#cxx = $(gcc-bin-dir)/g++
+#ld = $(gcc-bin-dir)/g++
+cxx = g++
+ld = g++
 cpp = $(cxx) -E 
 cxxflags = -Wall -Werror -g -fno-inline-functions
 ldflags = -g -lpthread
