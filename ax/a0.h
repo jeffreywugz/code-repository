@@ -17,14 +17,16 @@ ERRNO_DEF(POOL_OVERFLOW, -24, "pool overflow")
 ERRNO_DEF(STATE_NOT_MATCH, -27, "epoll ctl fail")
 ERRNO_DEF(NOT_EXIST, -27, "entry not exist")
 ERRNO_DEF(CALLBACK_NOT_SET, -28, "callback not set")
-ERRNO_DEF(ID_NOT_MATCH, -29, "ctx_mgr id not match")
+ERRNO_DEF(ID_NOT_MATCH, -29, "id_map id not match")
 ERRNO_DEF(NIO_CAN_NOT_LOCK, -30, "nio can not lock")
 
 ERRNO_DEF(EPOLL_CREATE_ERR, -1000, "epoll create fail")
 ERRNO_DEF(EPOLL_WAIT_ERR, -1001, "epoll wait fail")
 ERRNO_DEF(EPOLL_CTL_ERR, -1002, "epoll ctl fail")
 ERRNO_DEF(SOCK_CREATE_ERR, -1010, "sock create fail")
-ERRNO_DEF(ACCEPT_ERR, -1011, "sock accept fail")
+ERRNO_DEF(SOCK_BIND_ERR, -1011, "sock bind fail")
+ERRNO_DEF(SOCK_LISTEN_ERR, -1012, "sock listen fail")
+ERRNO_DEF(SOCK_ACCEPT_ERR, -1013, "sock accept fail")
 ERRNO_DEF(GET_SOCKOPT_ERR, -1011, "get sockopt fail")
 ERRNO_DEF(EVENTFD_CREATE_ERR, -1020, "eventfd create fail")
 ERRNO_DEF(EVENTFD_IO_ERR, -1021, "eventfd create fail")
@@ -116,7 +118,7 @@ struct Server
 {
   Server(): ip_(0), port_(0) {}
   ~Server() {}
-  bool is_valid() const { return ip_ != 0 && port_ > 0; }
+  bool is_valid() const { return port_ > 0; }
   int parse(const char* spec) {
     int err = AX_SUCCESS;
     char* ip = NULL;

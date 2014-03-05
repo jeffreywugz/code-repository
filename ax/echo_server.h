@@ -13,6 +13,11 @@ struct EchoSockHandler: public SockHandler
   }
   int destroy() {
     int err = AX_SUCCESS;
+    before_destroy();
+    if (fd_ > 0)
+    {
+      close(fd_);
+    }
     delete this;
     return err;
   }
@@ -38,10 +43,17 @@ public:
   int init(int port, int thread_num) {
     int err = AX_SUCCESS;
     int64_t capacity = 1<<16;
+    Server server;
     Sock* sock = new Sock();
+    server.ip_ = inet_addr("127.0.0.1");
+    server.port_ = port;
     if (AX_SUCCESS != (err = nio_.init(sock, capacity, (char*)ax_malloc(nio_.calc_mem_usage(capacity)))))
     {
       MLOG(ERROR, "nio.init()=>%d", err);
+    }
+    else if (AX_SUCCESS != (err = nio_.listen(server)))
+    {
+      MLOG(ERROR, "listen fail on port: port=%d", port);
     }
     else
     {
