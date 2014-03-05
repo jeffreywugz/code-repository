@@ -14,7 +14,7 @@ struct EchoSockHandler: public SockHandler
   int destroy() {
     int err = AX_SUCCESS;
     before_destroy();
-    if (fd_ > 0)
+    if (fd_ >= 0)
     {
       close(fd_);
     }
@@ -23,7 +23,21 @@ struct EchoSockHandler: public SockHandler
   }
   int read() {
     int err = AX_SUCCESS;;
-    MLOG(INFO, "read");
+    char buf[64];
+    ssize_t rbytes = 0;
+    if ((rbytes = ::read(fd_, buf, sizeof(buf))) < 0)
+    {
+      err = AX_SOCK_READ_ERR;
+    }
+    else if (rbytes == 0)
+    {
+      err = AX_SOCK_HUP;
+    }
+    else
+    {
+      ::write(fd_, buf, rbytes);
+    }
+    MLOG(INFO, "read: %.*s", rbytes, buf);
     return err;
   }
   int write() {

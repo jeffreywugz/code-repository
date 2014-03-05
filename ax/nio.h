@@ -199,7 +199,6 @@ public:
       {
         err = AX_EPOLL_CTL_ERR;
       }
-      sock_map_.revert(id);
     }
     if (INVALID_ID != id)
     {
@@ -229,7 +228,7 @@ public:
     {
       err = AX_INVALID_ARGUMENT;
     }
-    else if (epfd_ <= 0)
+    else if (epfd_ < 0)
     {
       err = AX_NOT_INIT;
     }
@@ -307,7 +306,7 @@ protected:
     int err = AX_SUCCESS;
     Event events[32];
     int count = 0;
-    int timeout = 100 * 1000;
+    int timeout = 1000;
     if (AX_SUCCESS != (err = handle_rearm_queue()))
     {
       ERR(err);
@@ -319,6 +318,7 @@ protected:
     }
     else
     {
+      //MLOG(INFO, "epoll_wait: count=%d", count);
       events[count++] = *event;
       for(int i = 0; i < count; i++)
       {
@@ -345,20 +345,31 @@ protected:
     int err = AX_SUCCESS;
     int fd = -1;
     Id id = INVALID_ID;
-    if ((fd= accept(sock->fd_, NULL, NULL)) < 0)
+    if ((fd = accept(sock->fd_, NULL, NULL)) < 0)
     {
       if (errno != EAGAIN && errno != EWOULDBLOCK)
       {
         err = AX_SOCK_ACCEPT_ERR;
       }
     }
-    else if (AX_SUCCESS != (err = (alloc_sock(id, fd, 0, EPOLLIN | EPOLLONESHOT))))
+    else if (AX_SUCCESS != (err = (alloc_sock(id, fd, SOCK_FLAG_NORMAL, EPOLLIN | EPOLLONESHOT))))
     {}
+    if (AX_SUCCESS != err)
+    {
+      if (fd >= 0)
+      {
+        close(fd);
+      }
+    }
     return err;
   }
   int handle_normal_sock(SockHandler* sock, Event* event) {
     int err = AX_SUCCESS;
-    if ((event->events & EPOLLOUT)
+    if ((event->events & EPOLLERR) || (event->events & EPOLLHUP))
+    {
+      err = AX_SOCK_HUP;
+    }
+    else if ((event->events & EPOLLOUT)
         && (AX_SUCCESS != (err = sock->write())))
     {}
     else if ((event->events & EPOLLIN)
@@ -383,16 +394,14 @@ protected:
   }
   int handle_event(SockHandler* sock, epoll_event* event) {
     int err = AX_SUCCESS;
-    bool locked = false;
+    //MLOG(INFO, "handle_event: id=%lx sock=%p event=%p u64=%lx", sock->id_, sock, event, event->data.u64);
     if (NULL == sock)
     {
       err = AX_INVALID_ARGUMENT;
       ERR(err);
     }
     else if (!sock->try_lock())
-    {
-      locked = true;
-    }
+    {}
     else
     {
       switch(sock->flag_)
@@ -415,9 +424,6 @@ protected:
         default:
           err = AX_NOT_SUPPORT;
       };
-    }
-    if (locked)
-    {
       sock->unlock();
     }
     return err;
