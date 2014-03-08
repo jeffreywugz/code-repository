@@ -68,6 +68,7 @@ PCODE_DEF(INSPECT, 4, "inspect")
 #define CACHE_ALIGNED __attribute__((aligned(CACHE_ALIGN_SIZE)))
 #define DIO_ALIGN_SIZE 512
 #define arrlen(x) (sizeof(x)/sizeof(x[0]))
+#define strbool(x) ((x)?"true":"false")
 
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>

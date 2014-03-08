@@ -4,7 +4,7 @@
 
 struct EchoServerSock: public Sock
 {
-  EchoServerSock(): Sock(NORMAL) {}
+  EchoServerSock(): Sock(NORMAL), last_active_time_(get_us()) {}
   virtual ~EchoServerSock() {}
   int clone(Sock*& other) {
     int err = AX_SUCCESS;
@@ -17,11 +17,17 @@ struct EchoServerSock: public Sock
     delete this;
     return err;
   }
+  bool kill() {
+    int64_t idle_timeout = 5 * 1000000;
+    return last_active_time_ + idle_timeout < get_us();
+  }
+  void mark_active() { last_active_time_ = get_us(); }
   int read(IOSched* sched) {
     int err = AX_SUCCESS;;
     char buf[64];
     ssize_t rbytes = 0;
     UNUSED(sched);
+    mark_active();
     if ((rbytes = ::read(fd_, buf, sizeof(buf))) < 0)
     {
       if (errno == EINTR)
@@ -44,9 +50,11 @@ struct EchoServerSock: public Sock
   }
   int write(IOSched* sched) {
     int err = AX_EAGAIN;
+    mark_active();
     MLOG(INFO, "fd=%d become writable, ignore", fd_);
     return err;
   }
+  int64_t last_active_time_;
 };
 
 class EchoServer

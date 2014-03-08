@@ -14,6 +14,18 @@ struct IdLock
     rwlock_.wrunlock();
     return id;
   }
+  int inc_ref_disregard_id(Id& id) {
+    int err = AX_SUCCESS;
+    if (!rwlock_.try_rdlock())
+    {
+      err = AX_STATE_NOT_MATCH;
+    }
+    else
+    {
+      id = AL(&id_);
+    }
+    return err;
+  }
   int inc_ref(Id id) {
     int err = AX_SUCCESS;
     if (id != AL(&id_))
@@ -119,6 +131,7 @@ public:
   }
   int64_t calc_mem_usage(int64_t capacity) { return free_list_.calc_mem_usage(capacity) + sizeof(Item) * capacity; }
   int64_t idx(int64_t x) { return x & (capacity_ - 1); }
+  int64_t get_capacity() const { return capacity_; }
 public:
   int add(Id& seq, value_t value) {
     int err = AX_SUCCESS;
@@ -171,6 +184,21 @@ public:
     }
     else if (AX_SUCCESS != (err = items_[idx(id)].idlock_.dec_ref(id)))
     {}
+    return err;
+  }
+  int fetch_by_idx(Id _idx, Id& id, value_t& value) {
+    int err = AX_SUCCESS;
+    Item* item = NULL;
+    if (NULL == items_)
+    {
+      err = AX_NOT_INIT;
+    }
+    else if (AX_SUCCESS != (err = (item = items_ +idx(_idx))->idlock_.inc_ref_disregard_id(id)))
+    {}
+    else
+    {
+      value = item->value_;
+    }
     return err;
   }
 private:

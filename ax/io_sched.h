@@ -47,6 +47,7 @@ struct Sock
   }
   virtual int read(IOSched* sched) = 0;
   virtual int write(IOSched* sched) = 0;
+  virtual bool kill() { return false; }
   char* repr(Printer& printer) {
     return printer.new_str("sock: id=%lx type=%lx ready4read=%lx ready4write=%lx fd=%d", id_, type_, ready4read_.flag_, ready4write_.flag_, fd_);
   }
@@ -67,7 +68,7 @@ struct Sock
 class IOSched
 {
 public:
-  IOSched() {}
+  IOSched(): killing_idx_(0), start_time_(0) {}
   ~IOSched() { destroy(); }
   static const uint64_t ID_MASK = (~0UL) >> 1;
   static const uint64_t WRITE_FLAG = 1UL<<63;
@@ -87,6 +88,10 @@ public:
     else if (AX_SUCCESS != (err = init_container(sock_map_, capacity, cutter)))
     {
       ERR(err);
+    }
+    else
+    {
+      start_time_ = get_us();
     }
     if (AX_SUCCESS != err)
     {
@@ -144,6 +149,7 @@ public:
         err = io_queue_.push((void*)desc);
       }
     }
+    try_del_idle_sock();
     return err;
   }
   int add(Id& id, Sock* sock) {
@@ -167,12 +173,6 @@ public:
       sock->after_create();
       sock_map_.revert(id);
     }
-    // if (AX_SUCCESS != err)
-    // {}
-    // else if (AX_SUCCESS != (io_queue_.push((void*)(id | WRITE_FLAG))))
-    // {}
-    // else if (AX_SUCCESS != (io_queue_.push((void*)(id | READ_FLAG))))
-    // {}
     if (INVALID_ID != id)
     {
       if (AX_SUCCESS != err)
@@ -225,7 +225,32 @@ public:
     }
     return err;
   }
+  int try_del_idle_sock() {
+    int err = AX_SUCCESS;
+    uint64_t end_kill_idx = ((get_us() - start_time_)/1000000) * sock_map_.get_capacity();
+    uint64_t idx = INVALID_ID;
+    while((idx = FAA(&killing_idx_, 1)) < end_kill_idx)
+    {
+      Id id = INVALID_ID;
+      Sock* sock = NULL;
+      if (AX_SUCCESS != (err = sock_map_.fetch_by_idx(idx, id, (void*&)sock)))
+      {}
+      else
+      {
+        bool can_kill = sock->kill();
+        MLOG(INFO, "try_kill: idx=%lx id=%lx can_kill=%s", idx, id, strbool(can_kill));
+        sock_map_.revert(id);
+        if (can_kill)
+        {
+          del(id);
+        }
+      }
+    }
+    return err;
+  }
 private:
+  uint64_t killing_idx_;
+  uint64_t start_time_;
   FutexQueue io_queue_;
   IDMap sock_map_;
 };
