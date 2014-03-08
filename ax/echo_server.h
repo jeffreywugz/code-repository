@@ -1,33 +1,35 @@
 #ifndef __OB_AX_ECHO_SERVER_H__
 #define __OB_AX_ECHO_SERVER_H__
-#include "nio.h"
+#include "io_sched.h"
 
-struct EchoSockHandler: public SockHandler
+struct EchoServerSock: public Sock
 {
-  EchoSockHandler() {}
-  virtual ~EchoSockHandler() {}
-  int clone(SockHandler*& other) {
+  EchoServerSock(): Sock(NORMAL) {}
+  virtual ~EchoServerSock() {}
+  int clone(Sock*& other) {
     int err = AX_SUCCESS;
-    other = new EchoSockHandler();
+    other = new EchoServerSock();
     return err;
   }
   int destroy() {
     int err = AX_SUCCESS;
-    before_destroy();
-    if (fd_ >= 0)
-    {
-      close(fd_);
-    }
+    Sock::destroy();
     delete this;
     return err;
   }
-  int read() {
+  int read(IOSched* sched) {
     int err = AX_SUCCESS;;
     char buf[64];
     ssize_t rbytes = 0;
+    UNUSED(sched);
     if ((rbytes = ::read(fd_, buf, sizeof(buf))) < 0)
     {
-      err = AX_SOCK_READ_ERR;
+      if (errno == EINTR)
+      {}
+      else if (EAGAIN == errno || EWOULDBLOCK == errno)
+      {
+        err = AX_EAGAIN;
+      }
     }
     else if (rbytes == 0)
     {
@@ -37,12 +39,12 @@ struct EchoSockHandler: public SockHandler
     {
       ::write(fd_, buf, rbytes);
     }
-    MLOG(INFO, "read: %.*s", rbytes, buf);
+    MLOG(INFO, "fd=%d read: %.*s", fd_, rbytes, buf);
     return err;
   }
-  int write() {
-    int err = AX_SUCCESS;;
-    MLOG(INFO, "read");
+  int write(IOSched* sched) {
+    int err = AX_EAGAIN;
+    MLOG(INFO, "fd=%d become writable, ignore", fd_);
     return err;
   }
 };
@@ -50,36 +52,38 @@ struct EchoSockHandler: public SockHandler
 class EchoServer
 {
 public:
-  typedef EchoSockHandler Sock;
-    EchoServer(): stop_(false), thread_num_(0) {}
+  typedef EchoServerSock Sock;
+  EchoServer(): stop_(false), thread_num_(0) {}
   ~EchoServer(){}
 public:
   int init(int port, int thread_num) {
     int err = AX_SUCCESS;
+    struct sockaddr_in addr;
+    const char* ip = "127.0.0.1";
     int64_t capacity = 1<<16;
-    Server server;
-    Sock* sock = new Sock();
-    server.ip_ = inet_addr("127.0.0.1");
-    server.port_ = port;
-    if (AX_SUCCESS != (err = nio_.init(sock, capacity, (char*)ax_malloc(nio_.calc_mem_usage(capacity)))))
+    if (AX_SUCCESS != (err = io_sched_.init(capacity, (char*)ax_malloc(io_sched_.calc_mem_usage(capacity)))))
     {
-      MLOG(ERROR, "nio.init()=>%d", err);
+      MLOG(ERROR, "io_sched.init()=>%d", err);
     }
-    else if (AX_SUCCESS != (err = nio_.listen(server)))
+    else if (AX_SUCCESS != (err = epoll_sock_.init(&io_sched_)))
     {
-      MLOG(ERROR, "listen fail on port: port=%d", port);
+      MLOG(ERROR, "epoll_sock.init()=>%d", err);
+    }
+    else if (AX_SUCCESS != (err = listen_sock_.init(epoll_sock_.fd_, &sock_, make_sockaddr(&addr, inet_addr(ip), port), &io_sched_)))
+    {
+      MLOG(ERROR, "listen_sock.init()=>%d", err);
     }
     else
     {
       thread_num_ = thread_num;
-      MLOG(INFO, "echo_server init: port=%d thread_num=%ld", port, thread_num);
+      MLOG(INFO, "echo_server init: port=%d thread_num=%d", port, thread_num);
     }
     return err;
   }
   int mainloop() {
     int err = AX_SUCCESS;
     while(!stop_) {
-      nio_.do_loop(100 * 1000);
+      io_sched_.sched(100 * 1000);
     }
     return err;
   }
@@ -105,7 +109,10 @@ public:
 private:
   bool stop_;
   int64_t thread_num_;
-  Nio nio_;
+  IOSched io_sched_;
+  EpollSock epoll_sock_;
+  ListenSock listen_sock_;
+  Sock sock_;
 };
 
 #endif /* __OB_AX_ECHO_SERVER_H__ */

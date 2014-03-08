@@ -1,8 +1,7 @@
 #ifndef __OB_AX_NIO_H__
 #define __OB_AX_NIO_H__
-#include "common.h"
-#include <sys/epoll.h>
-#include <sys/eventfd.h>
+#include "io_sched.h"
+
 
 enum {
   SOCK_FLAG_EPOLL = 1,
@@ -12,13 +11,13 @@ enum {
   SOCK_FLAG_NORMAL = 16
 };
 
-struct SockHandler
+struct EpollSock
 {
-  SockHandler(): id_(INVALID_ID), flag_(), fd_(-1), epfd_(-1) {
+  EpollSock(): id_(INVALID_ID), flag_(), fd_(-1), epfd_(-1) {
     event_.data.u64 = 0;
     event_.events = 0;
   }
-  virtual ~SockHandler() {}
+  virtual ~EpollSock() {}
   virtual int clone(SockHandler*& other) = 0;
   virtual int destroy() = 0;
   virtual int read() = 0;
@@ -48,38 +47,6 @@ struct SockHandler
   int epfd_;
   epoll_event event_;
 };
-
-inline int make_fd_nonblocking(int fd)
-{
-  int err = 0;
-  int flags = 0;
-  if ((flags = fcntl(fd, F_GETFL, 0)) < 0 || fcntl(fd, F_SETFL, flags|O_NONBLOCK) < 0)
-  {
-    err = -errno;
-  }
-  return err;
-}
-
-inline struct sockaddr_in* make_sockaddr(struct sockaddr_in* sin, in_addr_t ip, int port)
-{
-  if (NULL != sin)
-  {
-    sin->sin_port = htons(port);
-    sin->sin_addr.s_addr = ip;
-    sin->sin_family = AF_INET;
-  }
-  return sin;
-}
-
-inline struct epoll_event* make_epoll_event(epoll_event* event, uint32_t event_flag, Id id)
-{
-  if (NULL != event)
-  {
-    event->events = event_flag;
-    event->data.u64 = id;
-  }
-  return event;
-}
 
 class Nio
 {
@@ -165,59 +132,6 @@ public:
     }
     handler_ = NULL;
   }
-  int do_loop(int64_t timeout_us) {
-    int err = AX_SUCCESS;
-    Event* event = NULL;
-    SockHandler* sock = NULL;
-    Id id = INVALID_ID;
-    if (AX_SUCCESS != (err = ev_queue_.pop((void*&)event, timeout_us))
-        && AX_EAGAIN != err)
-    {
-      ERR(err);
-    }
-    else if (AX_EAGAIN == err)
-    {
-      err = AX_SUCCESS;
-    }
-    else if (AX_SUCCESS != (err = sock_map_.fetch((id = event->data.u64), (void*&)sock)))
-    {
-      ERR(err);
-    }
-    else if (AX_SUCCESS != (err = handle_event(sock, event))
-             && AX_NIO_CAN_NOT_LOCK != err)
-    {
-      ERR(err);
-    }
-    else if (AX_NIO_CAN_NOT_LOCK == err)
-    {
-      err = AX_SUCCESS;
-    }
-    else if (sock->flag_ != SOCK_FLAG_EPOLL)
-    {
-      Event event;
-      if (0 != epoll_ctl(sock->epfd_, EPOLL_CTL_MOD, sock->fd_, make_epoll_event(&event, sock->get_event_flag(), id)))
-      {
-        err = AX_EPOLL_CTL_ERR;
-      }
-    }
-    if (INVALID_ID != id)
-    {
-      sock_map_.revert(id);
-      if (AX_SUCCESS != err)
-      {
-        free_sock(id);
-      }
-    }
-    if (NULL != event)
-    {
-      int tmperr = AX_SUCCESS;
-      if (AX_SUCCESS != (tmperr = ev_free_list_.push(event)))
-      {
-        err = tmperr;
-      }
-    }
-    return err;
-  }
   int listen(Server& server) {
     int err = AX_SUCCESS;
     int backlog = 128;
@@ -264,83 +178,6 @@ public:
     return err;
   }
 protected:
-  int handle_rearm_queue() {
-    int err = AX_SUCCESS;
-    int tmperr = AX_SUCCESS;
-    Id id = INVALID_ID;
-    SockHandler* sock = NULL;
-    while(AX_SUCCESS == err)
-    {
-      if (AX_SUCCESS != (err = rearm_queue_.pop((void*&)id))
-          && AX_EAGAIN != err)
-      {
-        ERR(err);
-      }
-      else if (AX_EAGAIN == err)
-      {
-        err = AX_SUCCESS;
-        break;
-      }
-      else if (AX_SUCCESS != (tmperr = sock_map_.fetch(id, (void*&)sock)))
-      {
-        ERR(tmperr);
-      }
-      else
-      {
-        Event event;
-        if (0 != epoll_ctl(sock->epfd_, EPOLL_CTL_MOD, sock->fd_, make_epoll_event(&event, sock->get_event_flag(), id)))
-        {
-          tmperr = AX_EPOLL_CTL_ERR;
-          ERR(tmperr);
-        }
-        sock_map_.revert(id);
-        if (AX_SUCCESS != tmperr)
-        {
-          free_sock(id);
-        }
-      }
-    }
-    return err;
-  }
-  int handle_epoll_fd(SockHandler* sock, Event* event) {
-    int err = AX_SUCCESS;
-    Event events[32];
-    int count = 0;
-    int timeout = 1000;
-    if (AX_SUCCESS != (err = handle_rearm_queue()))
-    {
-      ERR(err);
-    }
-    else if ((count = epoll_wait(sock->fd_, events, arrlen(events) - 1, timeout)) < 0)
-    {
-      err = AX_EPOLL_WAIT_ERR;
-      ERR(err);
-    }
-    else
-    {
-      //MLOG(INFO, "epoll_wait: count=%d", count);
-      events[count++] = *event;
-      for(int i = 0; i < count; i++)
-      {
-        epoll_event* event = NULL;
-        while(AX_SUCCESS != ev_free_list_.pop((void*&)event))
-          ;
-        *event = events[i];
-        while(AX_SUCCESS != ev_queue_.push(event))
-          ;
-      }
-    }
-    return err;
-  }
-  int handle_rearm_fd(SockHandler* sock, Event* event) {
-    int err = AX_SUCCESS;
-    eventfd_t value = 0;
-    if (0 != eventfd_read(sock->fd_, &value))
-    {
-      err = AX_EVENTFD_CREATE_ERR;
-    }
-    return err;
-  }
   int handle_listen_sock(SockHandler* sock, Event* event) {
     int err = AX_SUCCESS;
     int fd = -1;
@@ -360,71 +197,6 @@ protected:
       {
         close(fd);
       }
-    }
-    return err;
-  }
-  int handle_normal_sock(SockHandler* sock, Event* event) {
-    int err = AX_SUCCESS;
-    if ((event->events & EPOLLERR) || (event->events & EPOLLHUP))
-    {
-      err = AX_SOCK_HUP;
-    }
-    else if ((event->events & EPOLLOUT)
-        && (AX_SUCCESS != (err = sock->write())))
-    {}
-    else if ((event->events & EPOLLIN)
-             && (AX_SUCCESS != (err = sock->read())))
-    {}
-    return err;
-  }
-  int handle_connecting_sock(SockHandler* sock, Event* event) {
-    int err = AX_SUCCESS;
-    int sys_err = 0;
-    socklen_t errlen = sizeof(sys_err);
-    if (0 != getsockopt(sock->fd_, SOL_SOCKET, SO_ERROR, &sys_err, &errlen))
-    {
-      err = AX_GET_SOCKOPT_ERR;
-      close(sock->fd_);
-    }
-    else
-    {
-      sock->flag_ = SOCK_FLAG_NORMAL;
-    }
-    return err;
-  }
-  int handle_event(SockHandler* sock, epoll_event* event) {
-    int err = AX_SUCCESS;
-    //MLOG(INFO, "handle_event: id=%lx sock=%p event=%p u64=%lx", sock->id_, sock, event, event->data.u64);
-    if (NULL == sock)
-    {
-      err = AX_INVALID_ARGUMENT;
-      ERR(err);
-    }
-    else if (!sock->try_lock())
-    {}
-    else
-    {
-      switch(sock->flag_)
-      {
-        case SOCK_FLAG_NORMAL:
-          err = handle_normal_sock(sock, event);
-          break;
-        case SOCK_FLAG_EPOLL:
-          err = handle_epoll_fd(sock, event);
-          break;
-        case SOCK_FLAG_REARM:
-          err = handle_rearm_fd(sock, event);
-          break;
-        case SOCK_FLAG_LISTEN:
-          err = handle_listen_sock(sock, event);
-          break;
-        case SOCK_FLAG_CONNECTING:
-          err = handle_connecting_sock(sock, event);
-          break;
-        default:
-          err = AX_NOT_SUPPORT;
-      };
-      sock->unlock();
     }
     return err;
   }
@@ -488,151 +260,11 @@ protected:
     return err;
   }
   int create_epoll_fd() {
-    int err = AX_SUCCESS;
-    Id id = INVALID_ID;
-    int epfd = -1;
-    struct epoll_event* event = NULL;
-    if ((epfd = epoll_create1(EPOLL_CLOEXEC)) < 0)
-    {
-      err = AX_EPOLL_CREATE_ERR;
-    }
-    else if (AX_SUCCESS != (err = alloc_sock(id, epfd, SOCK_FLAG_EPOLL, 0)))
-    {
-      ERR(err);
-    }
-    else if (AX_SUCCESS != (err = ev_free_list_.pop((void*&)event)))
-    {
-      ERR(err);
-    }
-    else if (AX_SUCCESS != (err = ev_queue_.push(make_epoll_event(event, 0, id))))
-    {
-      ERR(err);
-    }
-    if (AX_SUCCESS != err)
-    {
-      if (NULL != event)
-      {
-        ev_free_list_.push(event);
-      }
-      if (id != INVALID_ID)
-      {
-        free_sock(id);
-      }
-      else if (epfd >= 0)
-      {
-        close(epfd);
-      }
-    }
-    else
-    {
-      epfd_ = epfd;
-    }
-    return err;
-  }
-  int create_event_fd() {
-    int err = AX_SUCCESS;
-    Id id = INVALID_ID;
-    int evfd = -1;
-    if ((evfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC)) < 0)
-    {
-      err = AX_EVENTFD_CREATE_ERR;
-    }
-    else if (AX_SUCCESS != (err = alloc_sock(id, evfd, SOCK_FLAG_REARM, 0)))
-    {
-      ERR(err);
-    }
-    if (AX_SUCCESS != err)
-    {
-      if (id != INVALID_ID)
-      {
-        free_sock(id);
-      }
-      else if (evfd >= 0)
-      {
-        close(evfd);
-      }
-    }
-    else
-    {
-      evfd_ = evfd;
-    }
-    return err;
-  }
-  int get(Server& server, SockHandler*& sock) {
-    int err = AX_SUCCESS;
-    int fd = -1;
-    Id id = INVALID_ID;
-    struct sockaddr_in sin;
-    bool locked = false;
-    sock = NULL;
-    if (AX_SUCCESS != (err = out_sock_table_.lock(*(uint64_t*)(&server), (void*&)id)))
-    {
-      locked = true;
-    }
-    else if (INVALID_ID != id && AX_SUCCESS != sock_map_.fetch(id, (void*&)sock))
-    {
-      id = INVALID_ID;
-      sock = NULL;
-    }
-    if (AX_SUCCESS != err || INVALID_ID != id)
-    {}
-    else if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    {
-      err = AX_SOCK_CREATE_ERR;
-    }
-    else if (0 != make_fd_nonblocking(fd))
-    {
-      err = AX_FCNTL_ERR;
-    }
-    else if (0 != connect(fd, (sockaddr*)make_sockaddr(&sin, server.ip_, server.port_), sizeof(sin))
-             && EINPROGRESS != errno)
-    {
-      err = AX_SOCK_CREATE_ERR;
-    }
-    else if (AX_SUCCESS != (err = alloc_sock(id, fd, SOCK_FLAG_CONNECTING, EPOLLIN | EPOLLOUT | EPOLLONESHOT)))
-    {}
-    if (locked)
-    {
-      out_sock_table_.unlock(*(uint64_t*)(&server), (void*)id);
-    }
-    if (NULL != sock || INVALID_ID == id)
-    {}
-    else if (AX_SUCCESS != (err = sock_map_.fetch(id, (void*&)sock)))
-    {}
-    if (AX_SUCCESS != err)
-    {
-      if (fd >= 0)
-      {
-        close(fd);
-      }
-    }
-    return err;
-  }
-  int revert(SockHandler* sock, int handle_err) {
-    int err = AX_SUCCESS;
-    if (NULL == sock)
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if (AX_SUCCESS != (err = sock_map_.revert(sock->id_)))
-    {
-      ERR(err);
-    }
-    else if (AX_SUCCESS != handle_err)
-    {
-      err = free_sock(sock->id_);
-    }
-    return err;
-  }
 private:
-  SpinQueue ev_free_list_;
-  FutexQueue ev_queue_;
-  CacheIndex out_sock_table_;
-  IDMap sock_map_;
-  SpinQueue rearm_queue_;
-  int evfd_;
-  int epfd_;
-  SockHandler* handler_;
+  IOSchedule io_schedule_;
+  EpollSock epoll_sock_;
+  ListenSock listen_sock_;
+  Sock* sock_;
 };
 
 #endif /* __OB_AX_NIO_H__ */

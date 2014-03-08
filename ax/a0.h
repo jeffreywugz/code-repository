@@ -222,4 +222,5 @@ int init_container(T& t, int64_t capacity, Allocator& allocator)
 
 void* ax_malloc(size_t size, int mod_id=0);
 void ax_free(void* p);
+
 #endif /* __OB_AX_A0_H__ */

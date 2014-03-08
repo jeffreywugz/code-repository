@@ -16,4 +16,5 @@
 #define ERR(err) MLOG(ERROR, "err=%d syscall: %s", err, strerror(errno))
 #include "utils.h"
 #include "types.h"
+#include "debug.h"
 #endif /* __OB_AX_AX_COMMON_H__ */

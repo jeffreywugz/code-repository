@@ -66,18 +66,16 @@ private:
   int64_t pos_;
 };
 
-template<typename T>
-char* __repr__(Printer& printer, T& t)
-{
-  return t.repr(printer);
-}
-
 inline Printer& get_tl_printer()
 {
   static Printer printer[AX_MAX_THREAD_NUM];
   return printer[itid()];
 }
 
-#define repr(t) __repr__(get_tl_printer(), t)
+template<typename T>
+char* repr(T& t)
+{
+  return t.repr(get_tl_printer());
+}
 
 #endif /* __OB_AX_PRINTER_H__ */
