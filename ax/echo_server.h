@@ -2,9 +2,9 @@
 #define __OB_AX_ECHO_SERVER_H__
 #include "io_sched.h"
 
-struct EchoServerSock: public Sock
+struct EchoServerSock: public TcpSock
 {
-  EchoServerSock(): Sock(NORMAL), last_active_time_(get_us()) {}
+  EchoServerSock(): TcpSock(){}
   virtual ~EchoServerSock() {}
   int clone(Sock*& other) {
     int err = AX_SUCCESS;
@@ -17,44 +17,27 @@ struct EchoServerSock: public Sock
     delete this;
     return err;
   }
-  bool kill() {
-    int64_t idle_timeout = 5 * 1000000;
-    return last_active_time_ + idle_timeout < get_us();
-  }
-  void mark_active() { last_active_time_ = get_us(); }
-  int read(IOSched* sched) {
-    int err = AX_SUCCESS;;
-    char buf[64];
-    ssize_t rbytes = 0;
-    UNUSED(sched);
-    mark_active();
-    if ((rbytes = ::read(fd_, buf, sizeof(buf))) < 0)
-    {
-      if (errno == EINTR)
-      {}
-      else if (EAGAIN == errno || EWOULDBLOCK == errno)
-      {
-        err = AX_EAGAIN;
-      }
-    }
-    else if (rbytes == 0)
-    {
-      err = AX_SOCK_HUP;
-    }
-    else
-    {
-      ::write(fd_, buf, rbytes);
-    }
-    MLOG(INFO, "fd=%d read: %.*s", fd_, rbytes, buf);
+  int get_read_buf(char*& buf, int64_t& len) {
+    int err = AX_SUCCESS;
+    buf = buf_;
+    len = sizeof(buf_);
     return err;
   }
-  int write(IOSched* sched) {
-    int err = AX_EAGAIN;
-    mark_active();
+  int read_done(int rbytes) {
+    int err = AX_SUCCESS;
+    ::write(fd_, buf_, rbytes);
+    return err;
+  }
+  int get_write_buf(char*& buf, int64_t& len) {
+    UNUSED(buf);
+    UNUSED(len);
     MLOG(INFO, "fd=%d become writable, ignore", fd_);
-    return err;
+    return AX_EAGAIN;
   }
-  int64_t last_active_time_;
+  int write_done(int wbytes) {
+    return AX_SUCCESS;
+  }
+  char buf_[32];
 };
 
 class EchoServer
