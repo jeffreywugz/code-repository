@@ -29,7 +29,8 @@ class IOSched;
 struct Sock
 {
   enum {EPOLL = 1, LISTEN = 2, NORMAL_TCP = 3, READY = 1U<<31};
-  Sock(uint32_t flag): flag_(flag), id_(INVALID_ID), fd_(-1) {}
+  Sock(uint32_t flag): flag_(flag), id_(INVALID_ID), fd_(-1), sched_(NULL),
+                       last_active_time_(get_us()), rbytes_(0), wbytes_(0) {}
   virtual ~Sock() {}
   virtual int clone(Sock*& sock) {
     sock = NULL;
@@ -45,11 +46,11 @@ struct Sock
     }
     return err;
   }
-  virtual int read(IOSched* sched) = 0;
-  virtual int write(IOSched* sched) = 0;
+  virtual int read() = 0;
+  virtual int write() = 0;
   virtual bool kill() { return false; }
   char* repr(Printer& printer) {
-    return printer.new_str("sock: id=%lx flag=%x ready4read=%lx ready4write=%lx fd=%d", id_, flag_, ready4read_.flag_, ready4write_.flag_, fd_);
+    return printer.new_str("sock: id=%lx flag=%x ready4read=%lx ready4write=%lx fd=%d rb=%lu wb=%lu", id_, flag_, ready4read_.flag_, ready4write_.flag_, fd_, rbytes_, wbytes_);
   }
   void after_create() {
     MLOG(INFO, "create_sock: %s", ::repr(*this));
@@ -58,11 +59,16 @@ struct Sock
     MLOG(INFO, "destroy_sock: %s %s", ::repr(*this), lbt());
   }
   Sock* set_fd(int fd) { fd_ = fd; return this; }
+  void mark_active() { last_active_time_ = get_us(); }
   uint64_t flag_;
   Id id_;
   ReadyFlag ready4read_;
   ReadyFlag ready4write_;
   int fd_;
+  IOSched* sched_;
+  int64_t last_active_time_;
+  uint64_t rbytes_;
+  uint64_t wbytes_;
 };
 
 class IOSched
@@ -123,7 +129,7 @@ public:
       if (WRITE_FLAG == (desc & (~ID_MASK)))
       {
         uint64_t seq = sock->ready4write_.get_seq();
-        if (AX_EAGAIN == (err = sock->write(this)))
+        if (AX_EAGAIN == (err = sock->write()))
         {
           err = AX_SUCCESS;
           finished = sock->ready4write_.set_finished(seq);
@@ -132,7 +138,7 @@ public:
       else
       {
         uint64_t seq = sock->ready4read_.get_seq();
-        if (AX_EAGAIN == (err = sock->read(this)))
+        if (AX_EAGAIN == (err = sock->read()))
         {
           err = AX_SUCCESS;
           finished = sock->ready4read_.set_finished(seq);
@@ -170,6 +176,7 @@ public:
     else
     {
       sock->id_ = id;
+      sock->sched_ = this;
       sock->after_create();
       sock_map_.revert(id);
     }
@@ -291,15 +298,19 @@ struct EpollSock: public Sock
     }
     return err;
   }
-  int write(IOSched* sched) {
+  int write() {
     return AX_EAGAIN;
   }
-  int read(IOSched* sched) {
+  int read() {
     int err = AX_SUCCESS;
     int count = 0;
     int64_t timeout = 1000;
     epoll_event events[32];
-    if ((count = epoll_wait(fd_, events, arrlen(events), timeout)) < 0
+    if (NULL == sched_)
+    {
+      err = AX_NOT_INIT;
+    }
+    else if ((count = epoll_wait(fd_, events, arrlen(events), timeout)) < 0
         && EINTR != errno)
     {
       err = AX_EPOLL_WAIT_ERR;
@@ -316,441 +327,24 @@ struct EpollSock: public Sock
         Id id = events[i].data.u64;
         if ((evmask & EPOLLERR) || (evmask & EPOLLHUP))
         {
-          sched->del(id);
+          sched_->del(id);
           MLOG(INFO, "del sock: id=%lx", id);
         }
         else
         {
           if (evmask & EPOLLOUT)
           {
-            sched->set_ready_flag(id | IOSched::WRITE_FLAG);
+            sched_->set_ready_flag(id | IOSched::WRITE_FLAG);
           }
           if (evmask & EPOLLIN)
           {
-            sched->set_ready_flag(id | IOSched::READ_FLAG);
+            sched_->set_ready_flag(id | IOSched::READ_FLAG);
           }
         }
       }
     }
     return err;
   }
-};
-
-inline int make_fd_nonblocking(int fd)
-{
-  int err = 0;
-  int flags = 0;
-  if ((flags = fcntl(fd, F_GETFL, 0)) < 0 || fcntl(fd, F_SETFL, flags|O_NONBLOCK) < 0)
-  {
-    err = -errno;
-  }
-  return err;
-}
-
-inline struct sockaddr_in* make_sockaddr(struct sockaddr_in* sin, in_addr_t ip, int port)
-{
-  if (NULL != sin)
-  {
-    sin->sin_port = htons(port);
-    sin->sin_addr.s_addr = ip;
-    sin->sin_family = AF_INET;
-  }
-  return sin;
-}
-
-inline struct epoll_event* make_epoll_event(epoll_event* event, uint32_t event_flag, Id id)
-{
-  if (NULL != event)
-  {
-    event->events = event_flag;
-    event->data.u64 = id;
-  }
-  return event;
-}
-
-struct ListenSock: public Sock
-{
-  ListenSock(): Sock(LISTEN), epfd_(-1), sock_(NULL) {}
-  virtual ~ListenSock() { destroy(); }
-  int init(int epfd, Sock* sock, struct sockaddr_in* addr, IOSched* sched) {
-    int err = AX_SUCCESS;
-    Id id = INVALID_ID;
-    int backlog = 128;
-    struct epoll_event event;
-    if (epfd < 0 || NULL == sock || NULL == addr || NULL == sched)
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if ((fd_ = ::socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    {
-      err = AX_SOCK_CREATE_ERR;
-      ERR(err);
-    }
-    else if (0 != ::bind(fd_, (sockaddr*)addr, sizeof(*addr)))
-    {
-      err = AX_SOCK_BIND_ERR;
-      ERR(err);
-    }
-    else if (0 != ::listen(fd_, backlog))
-    {
-      err = AX_SOCK_LISTEN_ERR;
-    }
-    else if (0 != make_fd_nonblocking(fd_))
-    {
-      err = AX_FCNTL_ERR;
-    }
-    else if (AX_SUCCESS != (err = sched->add(id, this)))
-    {
-      ERR(err);
-    }
-    else if (0 != epoll_ctl(epfd, EPOLL_CTL_ADD, fd_, make_epoll_event(&event, EPOLLET | EPOLLIN, id)))
-    {
-      err = AX_EPOLL_CTL_ERR;
-      ERR(err);
-    }
-    else
-    {
-      epfd_ = epfd;
-      sock_ = sock;
-    }
-    if (AX_SUCCESS != err)
-    {
-      if (INVALID_ID != id)
-      {
-        sched->del(id);
-      }
-      else
-      {
-        destroy();
-      }
-    }
-    return err;
-  }
-  int destroy() {
-    int err = AX_SUCCESS;
-    epfd_ = -1;
-    sock_ = NULL;
-    Sock::destroy();
-    return err;
-  }
-  int write(IOSched* sched) {
-    return AX_EAGAIN;
-  }
-  int read(IOSched* sched) {
-    int err = AX_SUCCESS;
-    Sock* sock = NULL;
-    epoll_event event;
-    Id id = INVALID_ID;
-    int fd = -1;
-    MLOG(INFO, "try accpet incomming connection,listen_fd=%d", fd_);
-    if ((fd = accept(fd_, NULL, NULL)) < 0)
-    {
-      if (EINTR == errno)
-      {}
-      else if (EAGAIN == errno || EWOULDBLOCK == errno)
-      {
-        err = AX_EAGAIN;
-      }
-      else
-      {
-        err = AX_SOCK_ACCEPT_ERR;
-      }
-    }
-    else if (0 != make_fd_nonblocking(fd))
-    {
-      err = AX_FCNTL_ERR;
-    }
-    else if (epfd_ < 0 || NULL == sock_)
-    {
-      err = AX_NOT_INIT;
-    }
-    else if (AX_SUCCESS != (err = sock_->clone(sock)))
-    {
-      ERR(err);
-    }
-    else if (AX_SUCCESS != (err = (sched->add(id, sock->set_fd(fd)))))
-    {
-      ERR(err);
-    }
-    else if (0 != epoll_ctl(epfd_, EPOLL_CTL_ADD, fd, make_epoll_event(&event, EPOLLET | EPOLLIN | EPOLLOUT, id)))
-    {
-      err = AX_EPOLL_CTL_ERR;
-      ERR(err);
-    }
-    if (AX_SUCCESS != err)
-    {
-      if (INVALID_ID != id)
-      {
-        sched->del(id);
-      }
-      else if (NULL != sock)
-      {
-        sock->destroy();
-      }
-      else if (fd >= 0)
-      {
-        close(fd);
-      }
-    }
-    return err;
-  }
-  int epfd_;
-  Sock* sock_;
-};
-
-struct TcpSock: public Sock
-{
-  TcpSock(): Sock(NORMAL_TCP), last_active_time_(get_us()) {}
-  ~TcpSock() {}
-  virtual int destroy() {
-    int err = AX_SUCCESS;
-    Sock::destroy();
-    return err;
-  }
-  int connect(struct sockaddr_in* addr, Sock*& sock) {
-    int err = AX_SUCCESS;
-    struct sockaddr_in sin;
-    int fd = -1;
-    if (NULL == addr)
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if ((fd = ::socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    {
-      err = AX_SOCK_CREATE_ERR;
-    }
-    else if (0 != make_fd_nonblocking(fd))
-    {
-      err = AX_FCNTL_ERR;
-    }
-    else if (0 != ::connect(fd, (sockaddr*)addr, sizeof(sin))
-             && EINPROGRESS != errno)
-    {
-      err = AX_SOCK_CREATE_ERR;
-    }
-    else if (AX_SUCCESS != (err = this->clone(sock)))
-    {
-      ERR(err);
-    }
-    else
-    {
-      sock->set_fd(fd);
-    }
-    if (AX_SUCCESS != err)
-    {
-      if (NULL != sock)
-      {
-        sock->destroy();
-      }
-      else if (fd >= 0)
-      {
-        close(fd);
-      }
-    }
-    return err;
-  }
-  virtual bool kill() {
-    int64_t idle_timeout = 5 * 1000000;
-    return last_active_time_ + idle_timeout < get_us();
-  }
-  void mark_active() { last_active_time_ = get_us(); }
-  int read(IOSched* sched) {
-    int err = AX_SUCCESS;;
-    char* buf = NULL;
-    int64_t len = 0;
-    ssize_t rbytes = 0;
-    UNUSED(sched);
-    mark_active();
-    if (0 == (flag_ & READY))
-    {}
-    else
-    {
-      while(AX_SUCCESS == err && AX_SUCCESS == (err = get_read_buf(buf, len)))
-      {
-        if ((rbytes = ::read(fd_, buf, len)) < 0)
-        {
-          if (errno == EINTR)
-          {}
-          else if (EAGAIN == errno || EWOULDBLOCK == errno)
-          {
-            err = AX_EAGAIN;
-          }
-        }
-        else
-        {
-          if (rbytes == 0)
-          {
-            err = AX_SOCK_HUP;
-          }
-          else if (rbytes < len)
-          {
-            err = AX_EAGAIN;
-          }
-          read_done(rbytes);
-        }
-        MLOG(INFO, "fd=%d read: %.*s", fd_, rbytes, buf);
-      }
-    }
-    return err;
-  }
-  int write(IOSched* sched) {
-    int err = AX_SUCCESS;
-    char* buf = NULL;
-    int64_t len = 0;
-    int64_t wbytes = 0;
-    mark_active();
-    if (0 == (flag_ & READY))
-    {
-      int sys_err = 0;
-      socklen_t errlen = sizeof(sys_err);
-      if (0 != getsockopt(fd_, SOL_SOCKET, SO_ERROR, &sys_err, &errlen))
-      {
-        err = AX_GET_SOCKOPT_ERR;
-        MLOG(ERROR, "connect error: fd=%d err=%d", fd_, sys_err);
-      }
-      else
-      {
-        flag_ |= READY;
-      }
-    }
-    if (AX_SUCCESS == err)
-    {
-      while(AX_SUCCESS == (err = get_write_buf(buf, len)))
-      {
-        if ((wbytes = ::read(fd_, buf, len)) < 0)
-        {
-          if (errno == EINTR)
-          {}
-          else if (EAGAIN == errno || EWOULDBLOCK == errno)
-          {
-            err = AX_EAGAIN;
-          }
-        }
-        else
-        {
-          if (wbytes == 0)
-          {
-            err = AX_SOCK_HUP;
-          }
-          else if (wbytes < len)
-          {
-            err = AX_EAGAIN;
-          }
-          write_done(wbytes);
-        }
-      }
-    }
-    return err;
-  }
-  virtual int get_read_buf(char*& buf, int64_t& len) = 0;
-  virtual int read_done(int rbytes) = 0;
-  virtual int get_write_buf(char*& buf, int64_t& len) = 0;
-  virtual int write_done(int wbytes) = 0;
-  int64_t last_active_time_;
-};
-
-class TcpOutSockCache
-{
-public:
-  TcpOutSockCache(): sock_(NULL), sched_(NULL), epfd_(-1) {}
-  ~TcpOutSockCache() {}
-public:
-  int init(TcpSock* sock, IOSched* sched, int epfd, char* buf, int64_t capacity) {
-    int err = AX_SUCCESS;
-    if (NULL == sock || NULL == sched || epfd < 0 || NULL == buf || capacity <= 0 || !is2n(capacity))
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if (AX_SUCCESS != (err = cache_.init(capacity, buf)))
-    {}
-    else
-    {
-      sock_ = sock;
-      sched_ = sched;
-      epfd_ = epfd;
-    }
-    return err;
-  }
-  int64_t calc_mem_usage(int64_t capacity) {
-    return cache_.calc_mem_usage(capacity);
-  }
-  int fetch(Server server, Sock*& sock) {
-    int err = AX_SUCCESS;
-    struct epoll_event event;
-    struct sockaddr_in sin;
-    Id id = INVALID_ID;
-    bool locked = false;
-    sock = NULL;
-    if (!server.is_valid())
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if (NULL == sock_ || NULL == sched_)
-    {
-      err = AX_NOT_INIT;
-    }
-    else if (AX_SUCCESS != (err = cache_.lock(*(uint64_t*)(&server), (void*&)id)))
-    {
-      locked = true;
-    }
-    else if (INVALID_ID != id && AX_SUCCESS == (err = sched_->fetch(id, (Sock*&)sock)))
-    {}
-    else if (AX_SUCCESS != (err = sock_->connect(make_sockaddr(&sin, server.ip_, server.port_), sock)))
-    {
-      ERR(err);
-    }
-    else if (AX_SUCCESS != (err = sched_->add(id, sock)))
-    {
-      ERR(err);
-    }
-    else if (0 != epoll_ctl(epfd_, EPOLL_CTL_ADD, sock->fd_, make_epoll_event(&event, EPOLLET | EPOLLIN | EPOLLOUT, id)))
-    {
-      err = AX_EPOLL_CTL_ERR;
-      ERR(err);
-    }
-    else if (AX_SUCCESS != sched_->fetch(id, (Sock*&)sock))
-    {
-      sock = NULL;
-    }
-    if (AX_SUCCESS != err)
-    {
-      id = INVALID_ID;
-      if (NULL != sock)
-      {
-        sock->destroy();
-      }
-    }
-    if (locked)
-    {
-      cache_.unlock(*(uint64_t*)(&server), (void*)id);
-    }
-    return err;
-  }
-  int revert(Sock* sock, int handle_err) {
-    int err = AX_SUCCESS;
-    if (NULL == sock)
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if (NULL == sched_)
-    {
-      err = AX_NOT_INIT;
-    }
-    else if (AX_SUCCESS != (err = sched_->revert(sock->id_)))
-    {
-      ERR(err);
-    }
-    else if (AX_SUCCESS != handle_err)
-    {
-      err = sched_->del(sock->id_);
-    }
-    return err;
-  }
-private:
-  TcpSock* sock_;
-  IOSched* sched_;
-  int epfd_;
-  CacheIndex cache_;
 };
 #endif /* __OB_AX_IO_SCHED_H__ */
 

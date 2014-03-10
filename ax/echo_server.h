@@ -1,68 +1,69 @@
 #ifndef __OB_AX_ECHO_SERVER_H__
 #define __OB_AX_ECHO_SERVER_H__
-#include "io_sched.h"
+#include "nio.h"
 
-struct EchoServerSock: public TcpSock
+class EchoHandler: public PacketHandler
 {
-  EchoServerSock(): TcpSock(){}
-  virtual ~EchoServerSock() {}
-  int clone(Sock*& other) {
+public:
+  EchoHandler() {}
+  virtual ~EchoHandler() {}
+public:
+  int init(Nio* nio, int64_t max_pkt_num) {
     int err = AX_SUCCESS;
-    other = new EchoServerSock();
+    UNUSED(max_pkt_num);
+    nio_ = nio;
     return err;
   }
-  int destroy() {
+  int alloc_packet(Packet*& pkt) {
     int err = AX_SUCCESS;
-    Sock::destroy();
-    delete this;
+    pkt = new Packet();
     return err;
   }
-  int get_read_buf(char*& buf, int64_t& len) {
+  int free_packet(Packet* pkt) {
     int err = AX_SUCCESS;
-    buf = buf_;
-    len = sizeof(buf_);
+    if (NULL != pkt)
+    {
+      delete pkt;
+    }
     return err;
   }
-  int read_done(int rbytes) {
+  int handle_packet(Id id, Packet* pkt) {
     int err = AX_SUCCESS;
-    ::write(fd_, buf_, rbytes);
+    if (INVALID_ID == id || NULL == pkt)
+    {
+      err = AX_INVALID_ARGUMENT;
+    }
+    else if (NULL == nio_)
+    {
+      err = AX_NOT_INIT;
+    }
+    else if (AX_SUCCESS != (err = nio_->send_packet(id, pkt)))
+    {
+      MLOG(WARN, "send_packet()=>%d", err);
+    }
     return err;
   }
-  int get_write_buf(char*& buf, int64_t& len) {
-    UNUSED(buf);
-    UNUSED(len);
-    MLOG(INFO, "fd=%d become writable, ignore", fd_);
-    return AX_EAGAIN;
-  }
-  int write_done(int wbytes) {
-    return AX_SUCCESS;
-  }
-  char buf_[32];
+private:
+  Nio* nio_;
 };
 
 class EchoServer
 {
 public:
-  typedef EchoServerSock Sock;
   EchoServer(): stop_(false), thread_num_(0) {}
   ~EchoServer(){}
 public:
   int init(int port, int thread_num) {
     int err = AX_SUCCESS;
-    struct sockaddr_in addr;
-    const char* ip = "127.0.0.1";
+    int64_t max_pkt_num = 1<<10;
     int64_t capacity = 1<<16;
-    if (AX_SUCCESS != (err = io_sched_.init(capacity, (char*)ax_malloc(io_sched_.calc_mem_usage(capacity)))))
+    if (AX_SUCCESS != (err = handler_.init(&nio_, max_pkt_num)))
+    {
+      MLOG(ERROR, "handler.init()=>%d", err);
+    }
+    else if (AX_SUCCESS != (err = nio_.init(&handler_, port, capacity, (char*)ax_malloc(nio_.calc_mem_usage(capacity)))))
     {
       MLOG(ERROR, "io_sched.init()=>%d", err);
-    }
-    else if (AX_SUCCESS != (err = epoll_sock_.init(&io_sched_)))
-    {
-      MLOG(ERROR, "epoll_sock.init()=>%d", err);
-    }
-    else if (AX_SUCCESS != (err = listen_sock_.init(epoll_sock_.fd_, &sock_, make_sockaddr(&addr, inet_addr(ip), port), &io_sched_)))
-    {
-      MLOG(ERROR, "listen_sock.init()=>%d", err);
     }
     else
     {
@@ -74,36 +75,42 @@ public:
   int mainloop() {
     int err = AX_SUCCESS;
     while(!stop_) {
-      io_sched_.sched(100 * 1000);
+      nio_.sched(100 * 1000);
     }
     return err;
   }
   int start() {
     int sys_err = 0;
     int err = AX_SUCCESS;
-    pthread_t thread[32];
-    for(int64_t i = 0; i < min(thread_num_, (int64_t)arrlen(thread)); i++) {
-      if (0 != (sys_err = pthread_create(thread + i, NULL, (void* (*)(void*))thread_func, (void*)this)))
+    for(int64_t i = 0; i < min(thread_num_, (int64_t)arrlen(thread_)); i++) {
+      if (0 != (sys_err = pthread_create(thread_ + i, NULL, (void* (*)(void*))thread_func, (void*)this)))
       {
         err = AX_FATAL_ERR;
         MLOG(ERROR, "pthread_create fail, err=%d", sys_err);
       }
     }
-    for(int64_t i = 0; i < min(thread_num_, (int64_t)arrlen(thread)); i++) {
-      pthread_join(thread[i], NULL);
-    }
     return err;
+  }
+  int stop() {
+    stop_ = true;
+    return AX_SUCCESS;
+  }
+  int wait() {
+    for(int64_t i = 0; i < min(thread_num_, (int64_t)arrlen(thread_)); i++) {
+      pthread_join(thread_[i], NULL);
+    }
+    return AX_SUCCESS;
   }
   static int thread_func(EchoServer* self) {
     return self->mainloop();
   }
+  Nio& get_nio() { return nio_; }
 private:
   bool stop_;
   int64_t thread_num_;
-  IOSched io_sched_;
-  EpollSock epoll_sock_;
-  ListenSock listen_sock_;
-  Sock sock_;
+  pthread_t thread_[32];
+  Nio nio_;
+  EchoHandler handler_;
 };
 
 #endif /* __OB_AX_ECHO_SERVER_H__ */

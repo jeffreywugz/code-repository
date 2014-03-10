@@ -19,6 +19,7 @@ ERRNO_DEF(NOT_EXIST, -27, "entry not exist")
 ERRNO_DEF(CALLBACK_NOT_SET, -28, "callback not set")
 ERRNO_DEF(ID_NOT_MATCH, -29, "id_map id not match")
 ERRNO_DEF(NIO_CAN_NOT_LOCK, -30, "nio can not lock")
+ERRNO_DEF(PKT_CHECKSUM_ERR, -30, "nio can not lock")
 
 ERRNO_DEF(EPOLL_CREATE_ERR, -1000, "epoll create fail")
 ERRNO_DEF(EPOLL_WAIT_ERR, -1001, "epoll wait fail")
@@ -118,6 +119,11 @@ struct RecordHeader
   uint64_t checksum_;
 };
 
+inline int64_t min(int64_t x, int64_t y)
+{
+  return ((x > y)? y: x);
+}
+
 struct Server
 {
   Server(): ip_(0), port_(0) {}
@@ -125,16 +131,27 @@ struct Server
   bool is_valid() const { return port_ > 0; }
   int parse(const char* spec) {
     int err = AX_SUCCESS;
-    char* ip = NULL;
-    if (2 != sscanf(spec, "%as:%u", &ip, &port_))
+    char* p = NULL;
+    char ip[64] = "";
+    if (NULL == spec)
+    {
+      err = AX_INVALID_ARGUMENT;
+    }
+    else if (NULL == (p = strchr(const_cast<char*> (spec), ':')))
+    {
+      err = AX_INVALID_ARGUMENT;
+    }
+    else if (p - spec + 1 > (int64_t)sizeof(ip))
     {
       err = AX_INVALID_ARGUMENT;
     }
     else
     {
+      strncpy(ip, spec, min(p - spec, (int64_t)sizeof(ip)));
+      ip[p - spec] = 0;
       ip_ = inet_addr(ip);
+      port_ = atoi(p+1);
     }
-    free(ip);
     return err;
   }
   uint32_t ip_;
@@ -186,11 +203,6 @@ inline int64_t get_us()
   struct timeval time_val;
   gettimeofday(&time_val, NULL);
   return time_val.tv_sec*1000000 + time_val.tv_usec;
-}
-
-inline int64_t min(int64_t x, int64_t y)
-{
-  return ((x > y)? y: x);
 }
 
 struct MemChunkCutter
