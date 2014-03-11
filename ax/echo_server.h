@@ -43,7 +43,8 @@ public:
     }
     if (NULL != pkt)
     {
-      MLOG(INFO, "receive pkt: len=%d content=%s", pkt->len_, pkt->payload_);
+      FAA(&send_cnt_, 1);
+      //MLOG(INFO, "receive pkt: len=%d content=%s", pkt->len_, pkt->payload_);
     }
     return err;
   }

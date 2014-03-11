@@ -2,13 +2,17 @@
 #define __OB_AX_IO_SCHED_H__
 #include "common.h"
 
-inline bool set_if_bigger(uint64_t* val_ptr, uint64_t new_val, uint64_t seq_mask) {
+inline bool set_if_bigger(uint64_t* val_ptr, uint64_t new_val, uint64_t seq_mask, uint64_t* ret_old_value) {
   bool set_succ = false;
   uint64_t new_seq = new_val & seq_mask;
   uint64_t old_val = 0;
   while((((old_val = AL(val_ptr)) & seq_mask) < new_seq) && !(set_succ = CAS(val_ptr, old_val, new_val)))
   {
     PAUSE();
+  }
+  if (NULL != ret_old_value)
+  {
+    *ret_old_value = old_val;
   }
   return set_succ;
 }
@@ -19,8 +23,14 @@ struct ReadyFlag
   ReadyFlag(): seq_(1), flag_(0) {}
   ~ReadyFlag() {}
   uint64_t get_seq() { return FAA(&seq_, 1); }
-  bool set_ready() { return set_if_bigger(&flag_, (~SEQ_MASK) | get_seq(), SEQ_MASK);}
-  bool set_finished(uint64_t seq) { return set_if_bigger(&flag_, seq, SEQ_MASK); }
+  bool set_ready(uint64_t& seq) {
+    uint64_t old_val = 0;
+    seq = get_seq();
+    bool succ = set_if_bigger(&flag_, (~SEQ_MASK) | seq, SEQ_MASK, &old_val);
+    return succ && 0 == (old_val & ~SEQ_MASK);
+  }
+  bool set_finished(uint64_t seq) {
+    return set_if_bigger(&flag_, seq, SEQ_MASK, NULL); }
   uint64_t seq_;
   uint64_t flag_;
 };
@@ -127,6 +137,7 @@ public:
     else
     {
       bool finished = false;
+      //MLOG(INFO, "sched: id=%lx", desc);
       if (WRITE_FLAG == (desc & (~ID_MASK)))
       {
         uint64_t seq = sock->ready4write_.get_seq();
@@ -221,13 +232,14 @@ public:
     else
     {
       bool ready = false;
-      if (WRITE_FLAG == (id & (~ID_MASK)))
+      uint64_t seq = 0;
+      if (WRITE_FLAG == (flag & (~ID_MASK)))
       {
-        ready = sock->ready4write_.set_ready();
+        ready = sock->ready4write_.set_ready(seq);
       }
       else
       {
-        ready = sock->ready4read_.set_ready();
+        ready = sock->ready4read_.set_ready(seq);
       }
       sock_map_.revert(id);
       if (!ready)
@@ -235,10 +247,6 @@ public:
       else if (AX_SUCCESS != (err = io_queue_.push((void*)flag)))
       {
         del(id);
-      }
-      else
-      {
-        MLOG(INFO, "wakeup flag=%lx", flag);
       }
     }
     return err;
@@ -341,12 +349,10 @@ struct EpollSock: public Sock
           if (evmask & EPOLLOUT)
           {
             sched_->set_ready_flag(id | IOSched::WRITE_FLAG);
-            MLOG(INFO, "epoll_wakeup read: id=%lx", id);
           }
           if (evmask & EPOLLIN)
           {
             sched_->set_ready_flag(id | IOSched::READ_FLAG);
-            MLOG(INFO, "epoll_wakeup write: id=%lx", id);
           }
         }
       }

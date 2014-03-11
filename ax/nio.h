@@ -100,6 +100,20 @@ struct ListenSock: public Sock
     Sock::destroy();
     return err;
   }
+  int clone_sock(Sock*& sock) {
+    int err = AX_SUCCESS;
+    if (NULL == sock_)
+    {
+      err = AX_NOT_INIT;
+    }
+    else if (AX_SUCCESS != (err = sock_->clone(sock)))
+    {}
+    else
+    {
+      sock->flag_ |= READY;
+    }
+    return err;
+  }
   int write() {
     return AX_EAGAIN;
   }
@@ -135,7 +149,7 @@ struct ListenSock: public Sock
     {
       err = AX_NOT_INIT;
     }
-    else if (AX_SUCCESS != (err = sock_->clone(sock)))
+    else if (AX_SUCCESS != (err = clone_sock(sock)))
     {
       ERR(err);
     }
@@ -449,7 +463,7 @@ struct TcpSock: public Sock
           {
             err = AX_EAGAIN;
           }
-          MLOG(INFO, "fd=%d read: %.*s rbytes=%ld err=%d", fd_, rbytes, buf, rbytes, err);
+          //MLOG(INFO, "fd=%d read: %.*s rbytes=%ld err=%d", fd_, rbytes, buf, rbytes, err);
           read_done(rbytes);
         }
       }
@@ -499,7 +513,7 @@ struct TcpSock: public Sock
           {
             err = AX_EAGAIN;
           }
-          MLOG(INFO, "fd=%d write: %.*s wbytes=%ld err=%d", fd_, wbytes, buf, wbytes, err);
+          //MLOG(INFO, "fd=%d write: %.*s wbytes=%ld err=%d", fd_, wbytes, buf, wbytes, err);
           write_done(wbytes);
         }
       }
