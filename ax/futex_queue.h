@@ -146,6 +146,11 @@ public:
     }
     return err;
   }
+  int64_t get_size() const {
+    int64_t pop = AL(&pop_);
+    int64_t push = AL(&push_);
+    return push - pop;
+  }
 private:
   int64_t push_ CACHE_ALIGNED;
   int64_t pop_ CACHE_ALIGNED;

@@ -44,18 +44,19 @@ public:
   int pop(Item*& item) {
     int err = AX_SUCCESS;
     LockGuard guard(lock_);
-    if (NULL == item)
+    if (NULL == head_)
     {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if (NULL == head_)
-    {
+      item = NULL;
       err = AX_EAGAIN;
     }
     else
     {
       item = head_;
       head_ = head_->next_;
+      if (NULL == head_)
+      {
+        tail_ = NULL;
+      }
     }
     return err;
   }

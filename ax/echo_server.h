@@ -41,6 +41,10 @@ public:
     {
       MLOG(WARN, "send_packet()=>%d", err);
     }
+    if (NULL != pkt)
+    {
+      MLOG(INFO, "receive pkt: len=%d content=%s", pkt->len_, pkt->payload_);
+    }
     return err;
   }
 private:

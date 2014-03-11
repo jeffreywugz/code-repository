@@ -328,7 +328,7 @@ struct Packet: public LinkNode
     return get_remain(offset) <= 0;
   }
   int64_t get_remain(int64_t offset) {
-    return sizeof(*this) + len_ - (offset + (header_ - (char*)this));
+    return (payload_ + len_ - header_) - offset;
   }
   bool check_checksum() {
     return true;
@@ -370,7 +370,7 @@ struct Packet: public LinkNode
     }
     else
     {
-      memcpy(other, this, sizeof(this) + len_);
+      memcpy(other->header_, this->header_, get_remain(0));
     }
     return err;
   }
@@ -449,9 +449,9 @@ struct TcpSock: public Sock
           {
             err = AX_EAGAIN;
           }
+          MLOG(INFO, "fd=%d read: %.*s rbytes=%ld err=%d", fd_, rbytes, buf, rbytes, err);
           read_done(rbytes);
         }
-        MLOG(INFO, "fd=%d read: %.*s", fd_, rbytes, buf);
       }
     }
     return err;
@@ -480,7 +480,7 @@ struct TcpSock: public Sock
     {
       while(AX_SUCCESS == (err = get_write_buf(buf, len)))
       {
-        if ((wbytes = ::read(fd_, buf, len)) < 0)
+        if ((wbytes = ::write(fd_, buf, len)) < 0)
         {
           if (errno == EINTR)
           {}
@@ -499,6 +499,7 @@ struct TcpSock: public Sock
           {
             err = AX_EAGAIN;
           }
+          MLOG(INFO, "fd=%d write: %.*s wbytes=%ld err=%d", fd_, wbytes, buf, wbytes, err);
           write_done(wbytes);
         }
       }
@@ -605,6 +606,10 @@ struct TcpSock: public Sock
     if (NULL != writing_pkt_)
     {
       err = writing_pkt_->get_buf(writen_offset_, buf, len);
+      if (AX_SUCCESS != err)
+      {
+        ERR(err);
+      }
     }
     return err;
   }
@@ -687,9 +692,13 @@ public:
     int err = AX_SUCCESS;
     TcpSock* sock = NULL;
     if (AX_SUCCESS != (sched_.fetch(id, (Sock*&)sock)))
-    {}
+    {
+      MLOG(ERROR, "fetch fail: maybe connection is del: id=%lx", id);
+    }
     else if (AX_SUCCESS != (err = sock->send(pkt)))
-    {}
+    {
+      MLOG(ERROR, "send fail: id=%lx", id);
+    }
     if (NULL != sock)
     {
       sched_.revert(id);

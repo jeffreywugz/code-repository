@@ -112,6 +112,7 @@ public:
     io_queue_.destroy();
     sock_map_.destroy();
   }
+  int64_t get_qsize () const { return io_queue_.get_size(); }
   int sched(int64_t timeout_us) {
     int err = AX_SUCCESS;
     Id desc = INVALID_ID;
@@ -235,6 +236,10 @@ public:
       {
         del(id);
       }
+      else
+      {
+        MLOG(INFO, "wakeup flag=%lx", flag);
+      }
     }
     return err;
   }
@@ -242,23 +247,23 @@ public:
     int err = AX_SUCCESS;
     uint64_t end_kill_idx = ((get_us() - start_time_)/1000000) * sock_map_.get_capacity();
     uint64_t idx = INVALID_ID;
-    while((idx = FAA(&killing_idx_, 1)) < end_kill_idx)
-    {
+    do {
       Id id = INVALID_ID;
       Sock* sock = NULL;
+      idx = FAA(&killing_idx_, 1);
       if (AX_SUCCESS != (err = sock_map_.fetch_by_idx(idx, id, (void*&)sock)))
       {}
       else
       {
         bool can_kill = sock->kill();
-        MLOG(INFO, "try_kill: idx=%lx id=%lx can_kill=%s", idx, id, strbool(can_kill));
+        //MLOG(INFO, "try_kill: idx=%lx id=%lx can_kill=%s", idx, id, strbool(can_kill));
         sock_map_.revert(id);
         if (can_kill)
         {
           del(id);
         }
       }
-    }
+    } while(idx < end_kill_idx);
     return err;
   }
 private:
@@ -310,6 +315,8 @@ struct EpollSock: public Sock
     {
       err = AX_NOT_INIT;
     }
+    else if (sched_->get_qsize() > 0)
+    {}
     else if ((count = epoll_wait(fd_, events, arrlen(events), timeout)) < 0
         && EINTR != errno)
     {
@@ -320,7 +327,6 @@ struct EpollSock: public Sock
     {}
     else if (count > 0)
     {
-      MLOG(INFO, "epoll_wait: count=%d", count);
       for(int i = 0; i < count; i++)
       {
         uint32_t evmask = events[i].events;
@@ -328,17 +334,19 @@ struct EpollSock: public Sock
         if ((evmask & EPOLLERR) || (evmask & EPOLLHUP))
         {
           sched_->del(id);
-          MLOG(INFO, "del sock: id=%lx", id);
+          MLOG(INFO, "del sock: id=%lx receive EPOLLHUP", id);
         }
         else
         {
           if (evmask & EPOLLOUT)
           {
             sched_->set_ready_flag(id | IOSched::WRITE_FLAG);
+            MLOG(INFO, "epoll_wakeup read: id=%lx", id);
           }
           if (evmask & EPOLLIN)
           {
             sched_->set_ready_flag(id | IOSched::READ_FLAG);
+            MLOG(INFO, "epoll_wakeup write: id=%lx", id);
           }
         }
       }
