@@ -38,7 +38,7 @@ public:
         }
         if (AL(&n_waiters_) > 0)
         {
-          futex(&stock_, FUTEX_WAKE, INT32_MAX, NULL, NULL, 0);
+          futex_wake(&stock_, INT32_MAX);
         }
       }
       return err;

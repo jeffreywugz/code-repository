@@ -222,7 +222,7 @@ public:
       {
         uint64_t value = 0;
         eventfd_read(evfd_,  &value);
-        MLOG(INFO, "wakeup by evfd: value=%ld", value);
+        PC_ADD(EVWAKE, 1);
       }
       else
       {
