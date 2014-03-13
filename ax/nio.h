@@ -25,26 +25,15 @@ inline struct sockaddr_in* make_sockaddr(struct sockaddr_in* sin, in_addr_t ip, 
   return sin;
 }
 
-inline struct epoll_event* make_epoll_event(epoll_event* event, uint32_t event_flag, Id id)
-{
-  if (NULL != event)
-  {
-    event->events = event_flag;
-    event->data.u64 = id;
-  }
-  return event;
-}
-
 struct ListenSock: public Sock
 {
-  ListenSock(): Sock(LISTEN), epfd_(-1), sock_(NULL) {}
+  ListenSock(): Sock(LISTEN), sock_(NULL) {}
   virtual ~ListenSock() { destroy(); }
-  int init(IOSched* sched, int epfd, Sock* sock, struct sockaddr_in* addr) {
+  int init(IOSched* sched, Sock* sock, struct sockaddr_in* addr) {
     int err = AX_SUCCESS;
     Id id = INVALID_ID;
     int backlog = 128;
-    struct epoll_event event;
-    if (NULL == sched || epfd < 0 || NULL == sock || NULL == addr)
+    if (NULL == sched || NULL == sock || NULL == addr)
     {
       err = AX_INVALID_ARGUMENT;
     }
@@ -66,18 +55,12 @@ struct ListenSock: public Sock
     {
       err = AX_FCNTL_ERR;
     }
-    else if (AX_SUCCESS != (err = sched->add(id, this)))
+    else if (AX_SUCCESS != (err = sched->add(id, this, EPOLLET | EPOLLIN)))
     {
-      ERR(err);
-    }
-    else if (0 != epoll_ctl(epfd, EPOLL_CTL_ADD, fd_, make_epoll_event(&event, EPOLLET | EPOLLIN, id)))
-    {
-      err = AX_EPOLL_CTL_ERR;
       ERR(err);
     }
     else
     {
-      epfd_ = epfd;
       sock_ = sock;
     }
     if (AX_SUCCESS != err)
@@ -120,7 +103,6 @@ struct ListenSock: public Sock
   int read() {
     int err = AX_SUCCESS;
     Sock* sock = NULL;
-    epoll_event event;
     Id id = INVALID_ID;
     int fd = -1;
     MLOG(INFO, "try accpet incomming connection,listen_fd=%d", fd_);
@@ -153,13 +135,8 @@ struct ListenSock: public Sock
     {
       ERR(err);
     }
-    else if (AX_SUCCESS != (err = (sched_->add(id, sock->set_fd(fd)))))
+    else if (AX_SUCCESS != (err = (sched_->add(id, sock->set_fd(fd), EPOLLET | EPOLLIN | EPOLLOUT))))
     {
-      ERR(err);
-    }
-    else if (0 != epoll_ctl(epfd_, EPOLL_CTL_ADD, fd, make_epoll_event(&event, EPOLLET | EPOLLIN | EPOLLOUT, id)))
-    {
-      err = AX_EPOLL_CTL_ERR;
       ERR(err);
     }
     if (AX_SUCCESS != err)
@@ -187,12 +164,12 @@ struct ListenSock: public Sock
 class OutSockCache
 {
 public:
-  OutSockCache(): sched_(NULL), sock_(NULL), epfd_(-1) {}
+  OutSockCache(): sched_(NULL), sock_(NULL) {}
   ~OutSockCache() {}
 public:
-  int init(IOSched* sched, Sock* sock, int epfd, int64_t capacity, char* buf) {
+  int init(IOSched* sched, Sock* sock, int64_t capacity, char* buf) {
     int err = AX_SUCCESS;
-    if (NULL == sched || NULL == sock || epfd < 0 || NULL == buf || capacity <= 0 || !is2n(capacity))
+    if (NULL == sched || NULL == sock || NULL == buf || capacity <= 0 || !is2n(capacity))
     {
       err = AX_INVALID_ARGUMENT;
     }
@@ -202,7 +179,6 @@ public:
     {
       sched_ = sched;
       sock_ = sock;
-      epfd_ = epfd;
     }
     return err;
   }
@@ -211,7 +187,6 @@ public:
   }
   int fetch(Server server, Sock*& sock) {
     int err = AX_SUCCESS;
-    struct epoll_event event;
     struct sockaddr_in sin;
     Id id = INVALID_ID;
     bool locked = false;
@@ -234,13 +209,8 @@ public:
     {
       ERR(err);
     }
-    else if (AX_SUCCESS != (err = sched_->add(id, sock)))
+    else if (AX_SUCCESS != (err = sched_->add(id, sock, EPOLLET | EPOLLIN | EPOLLOUT)))
     {
-      ERR(err);
-    }
-    else if (0 != epoll_ctl(epfd_, EPOLL_CTL_ADD, sock->fd_, make_epoll_event(&event, EPOLLET | EPOLLIN | EPOLLOUT, id)))
-    {
-      err = AX_EPOLL_CTL_ERR;
       ERR(err);
     }
     else if (AX_SUCCESS != sched_->fetch(id, (Sock*&)sock))
@@ -330,7 +300,6 @@ private:
 private:
   IOSched* sched_;
   Sock* sock_;
-  int epfd_;
   CacheIndex cache_;
 };
 
@@ -678,19 +647,15 @@ public:
     {
       MLOG(ERROR, "io_sched.init()=>%d", err);
     }
-    else if (AX_SUCCESS != (err = epoll_sock_.init(&sched_)))
-    {
-      MLOG(ERROR, "epoll_sock.init()=>%d", err);
-    }
     else if (AX_SUCCESS != (err = normal_sock_.init(&sched_, handler)))
     {
       MLOG(ERROR, "normal_sock.init()=>%d", err);
     }
-    else if (port > 0 && AX_SUCCESS != (err = listen_sock_.init(&sched_, epoll_sock_.fd_, &normal_sock_, make_sockaddr(&addr, inet_addr(ip), port))))
+    else if (port > 0 && AX_SUCCESS != (err = listen_sock_.init(&sched_, &normal_sock_, make_sockaddr(&addr, inet_addr(ip), port))))
     {
       MLOG(ERROR, "listen_sock.init()=>%d", err);
     }
-    else if (AX_SUCCESS != (err = out_sock_cache_.init(&sched_, &normal_sock_, epoll_sock_.fd_, capacity, cutter.alloc(out_sock_cache_.calc_mem_usage(capacity)))))
+    else if (AX_SUCCESS != (err = out_sock_cache_.init(&sched_, &normal_sock_, capacity, cutter.alloc(out_sock_cache_.calc_mem_usage(capacity)))))
     {
       MLOG(ERROR, "out_sock_cache.init()=>%d", err);
     }
@@ -739,7 +704,6 @@ public:
 private:
   IOSched sched_;
   OutSockCache out_sock_cache_;
-  EpollSock epoll_sock_;
   ListenSock listen_sock_;
   TcpSock normal_sock_;
 };

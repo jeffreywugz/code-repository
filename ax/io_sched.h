@@ -1,6 +1,9 @@
 #ifndef __OB_AX_IO_SCHED_H__
 #define __OB_AX_IO_SCHED_H__
 #include "common.h"
+#include "pcounter.h"
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
 
 inline bool set_if_bigger(uint64_t* val_ptr, uint64_t new_val, uint64_t seq_mask, uint64_t* ret_old_value) {
   bool set_succ = false;
@@ -34,6 +37,16 @@ struct ReadyFlag
   uint64_t seq_;
   uint64_t flag_;
 };
+
+inline struct epoll_event* make_epoll_event(epoll_event* event, uint32_t event_flag, Id id)
+{
+  if (NULL != event)
+  {
+    event->events = event_flag;
+    event->data.u64 = id;
+  }
+  return event;
+}
 
 class IOSched;
 struct Sock
@@ -84,7 +97,150 @@ struct Sock
 class IOSched
 {
 public:
-  IOSched(): killing_idx_(0), start_time_(0) {}
+  struct EpollSock: public Sock
+  {
+    EpollSock(): Sock(EPOLL), is_waiting_(false), evfd_(-1) {}
+    virtual ~EpollSock() { destroy(); }
+    int init(IOSched* sched) {
+      int err = AX_SUCCESS;
+      epoll_event event;
+      Id id = INVALID_ID;
+      if (NULL == sched)
+      {
+        err = AX_INVALID_ARGUMENT;
+      }
+      else if ((fd_ = epoll_create1(EPOLL_CLOEXEC)) < 0)
+      {
+        err = AX_EPOLL_CREATE_ERR;
+      }
+      else if (AX_SUCCESS != (err = sched->add(id, this, 0)))
+      {
+        ERR(err);
+      }
+      else if (AX_SUCCESS != (err = sched->set_ready_flag(id | IOSched::READ_FLAG)))
+      {
+        ERR(err);
+      }
+      else if ((evfd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC)) < 0)
+      {
+        err = AX_EVENTFD_CREATE_ERR;
+        ERR(err);
+      }
+      else if (0 != epoll_ctl(fd_, EPOLL_CTL_ADD, evfd_, make_epoll_event(&event, EPOLLIN, INVALID_ID)))
+      {
+        err = AX_EPOLL_CTL_ERR;
+        ERR(err);
+      }
+      if (AX_SUCCESS != err)
+      {
+        if (INVALID_ID != id)
+        {
+          sched->del(id);
+        }
+        else
+        {
+          destroy();
+        }
+      }
+      return err;
+    }
+    int destroy() {
+      if (evfd_ >= 0)
+      {
+        close(evfd_);
+        evfd_ = -1;
+      }
+      Sock::destroy();
+      return AX_SUCCESS;
+    }
+    int write() {
+      return AX_EAGAIN;
+    }
+    int add(int fd, uint32_t flag, Id id) {
+      int err = AX_SUCCESS;
+      epoll_event event;
+      if (fd == fd_)
+      {}
+      else if (0 != epoll_ctl(fd_, EPOLL_CTL_ADD, fd, make_epoll_event(&event, flag, id)))
+      {
+        err = AX_EPOLL_CTL_ERR;
+      }
+      return err;
+    }
+    int do_epoll_wait(int fd, epoll_event* events, int maxevents, int timeout) {
+      int count = 0;
+      PC_PROFILE(EPWAIT);
+      AS(&is_waiting_, true);
+      count = epoll_wait(fd, events, maxevents, timeout);
+      AS(&is_waiting_, false);
+      return count;
+    }
+
+    void wakeup() {
+      if (AL(&is_waiting_))
+      {
+        eventfd_write(evfd_, 1);
+      }
+    }
+    int read() {
+      int err = AX_SUCCESS;
+      int count = 0;
+      int64_t timeout = 1000;
+      epoll_event events[32];
+      if (NULL == sched_)
+      {
+        err = AX_NOT_INIT;
+      }
+      else if (sched_->get_qsize() > 0)
+      {}
+      else if ((count = do_epoll_wait(fd_, events, arrlen(events), timeout)) < 0
+               && EINTR != errno)
+      {
+        err = AX_EPOLL_WAIT_ERR;
+        ERR(err);
+      }
+      else if (EINTR == errno)
+      {}
+      else if (count <= 0)
+      {}
+      else
+      {
+        for(int i = 0; i < count; i++)
+        {
+          handle_epoll_event(events[i].data.u64, events[i].events);
+        }
+      }
+      return err;
+    }
+    void handle_epoll_event(Id id, uint32_t evmask) {
+      if ((evmask & EPOLLERR) || (evmask & EPOLLHUP))
+      {
+        sched_->del(id);
+        MLOG(INFO, "del sock: id=%lx receive EPOLLHUP", id);
+      }
+      else if (INVALID_ID == id)
+      {
+        uint64_t value = 0;
+        eventfd_read(evfd_,  &value);
+        MLOG(INFO, "wakeup by evfd: value=%ld", value);
+      }
+      else
+      {
+        if (evmask & EPOLLOUT)
+        {
+          sched_->set_ready_flag(id | IOSched::WRITE_FLAG);
+        }
+        if (evmask & EPOLLIN)
+        {
+          sched_->set_ready_flag(id | IOSched::READ_FLAG);
+        }
+      }
+    }
+    bool is_waiting_;
+    int evfd_;
+  };
+public:
+  IOSched(): killing_idx_(0), start_time_(0)  {}
   ~IOSched() { destroy(); }
   static const uint64_t ID_MASK = (~0UL) >> 1;
   static const uint64_t WRITE_FLAG = 1UL<<63;
@@ -105,6 +261,10 @@ public:
     {
       ERR(err);
     }
+    else if (AX_SUCCESS != (err = epoll_sock_.init(this)))
+    {
+      ERR(err);
+    }
     else
     {
       start_time_ = get_us();
@@ -119,6 +279,16 @@ public:
     return io_queue_.calc_mem_usage(capacity) + sock_map_.calc_mem_usage(capacity);
   }
   void destroy() {
+    for(int64_t idx = 0; idx < sock_map_.get_capacity(); idx++)
+    {
+      Id id = INVALID_ID;
+      Sock* sock = NULL;
+      if (AX_SUCCESS == sock_map_.fetch_by_idx(idx, id, (void*&)sock))
+      {
+        sock_map_.revert(id);
+        del(id);
+      }
+    }
     io_queue_.destroy();
     sock_map_.destroy();
   }
@@ -137,7 +307,7 @@ public:
     else
     {
       bool finished = false;
-      //MLOG(INFO, "sched: id=%lx", desc);
+      PC_PROFILE(IO);
       if (WRITE_FLAG == (desc & (~ID_MASK)))
       {
         uint64_t seq = sock->ready4write_.get_seq();
@@ -157,20 +327,24 @@ public:
         }
       }
       sock_map_.revert(id);
+      if (finished)
+      {}
+      else if (AX_SUCCESS != (err = io_queue_.push((void*)desc)))
+      {}
+      else if (io_queue_.get_size() > 0)
+      {
+        epoll_sock_.wakeup();
+      }
       if (AX_SUCCESS != err)
       {
         del(id);
         MLOG(INFO, "del: desc=%lx err=%d", desc, err);
       }
-      if (!finished)
-      {
-        err = io_queue_.push((void*)desc);
-      }
     }
     try_del_idle_sock();
     return err;
   }
-  int add(Id& id, Sock* sock) {
+  int add(Id& id, Sock* sock, uint32_t event_flag) {
     int err = AX_SUCCESS;
     if (NULL == sock)
     {
@@ -183,6 +357,11 @@ public:
     else if (AX_SUCCESS != (err = sock_map_.fetch(id, (void*&)sock)))
     {
       id = INVALID_ID;
+      ERR(err);
+    }
+    else if (AX_SUCCESS != (err = epoll_sock_.add(sock->fd_, event_flag, id)))
+    {
+      err = AX_EPOLL_CTL_ERR;
       ERR(err);
     }
     else
@@ -245,6 +424,12 @@ public:
       if (!ready)
       {}
       else if (AX_SUCCESS != (err = io_queue_.push((void*)flag)))
+      {}
+      else if (io_queue_.get_size() > 0)
+      {
+        epoll_sock_.wakeup();
+      }
+      if (AX_SUCCESS != err)
       {
         del(id);
       }
@@ -264,7 +449,6 @@ public:
       else
       {
         bool can_kill = sock->kill();
-        //MLOG(INFO, "try_kill: idx=%lx id=%lx can_kill=%s", idx, id, strbool(can_kill));
         sock_map_.revert(id);
         if (can_kill)
         {
@@ -277,88 +461,10 @@ public:
 private:
   uint64_t killing_idx_;
   uint64_t start_time_;
+  EpollSock epoll_sock_;
   FutexQueue io_queue_;
   IDMap sock_map_;
 };
 
-#include <sys/epoll.h>
-struct EpollSock: public Sock
-{
-  EpollSock(): Sock(EPOLL) {}
-  virtual ~EpollSock() { destroy(); }
-  int init(IOSched* sched) {
-    int err = AX_SUCCESS;
-    Id id = INVALID_ID;
-    if (NULL == sched)
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if ((fd_ = epoll_create1(EPOLL_CLOEXEC)) < 0)
-    {
-      err = AX_EPOLL_CREATE_ERR;
-    }
-    else if (AX_SUCCESS != (err = sched->add(id, this)))
-    {
-      ERR(err);
-    }
-    else if (AX_SUCCESS != (err = sched->set_ready_flag(id | IOSched::READ_FLAG)))
-    {
-      ERR(err);
-    }
-    if (AX_SUCCESS != err)
-    {
-      destroy();
-    }
-    return err;
-  }
-  int write() {
-    return AX_EAGAIN;
-  }
-  int read() {
-    int err = AX_SUCCESS;
-    int count = 0;
-    int64_t timeout = 1000;
-    epoll_event events[32];
-    if (NULL == sched_)
-    {
-      err = AX_NOT_INIT;
-    }
-    else if (sched_->get_qsize() > 0)
-    {}
-    else if ((count = epoll_wait(fd_, events, arrlen(events), timeout)) < 0
-        && EINTR != errno)
-    {
-      err = AX_EPOLL_WAIT_ERR;
-      ERR(err);
-    }
-    else if (EINTR == errno)
-    {}
-    else if (count > 0)
-    {
-      for(int i = 0; i < count; i++)
-      {
-        uint32_t evmask = events[i].events;
-        Id id = events[i].data.u64;
-        if ((evmask & EPOLLERR) || (evmask & EPOLLHUP))
-        {
-          sched_->del(id);
-          MLOG(INFO, "del sock: id=%lx receive EPOLLHUP", id);
-        }
-        else
-        {
-          if (evmask & EPOLLOUT)
-          {
-            sched_->set_ready_flag(id | IOSched::WRITE_FLAG);
-          }
-          if (evmask & EPOLLIN)
-          {
-            sched_->set_ready_flag(id | IOSched::READ_FLAG);
-          }
-        }
-      }
-    }
-    return err;
-  }
-};
 #endif /* __OB_AX_IO_SCHED_H__ */
 

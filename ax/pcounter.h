@@ -1,5 +1,7 @@
 #ifdef PCOUNTER_DEF
 PCOUNTER_DEF(RPKT)
+PCOUNTER_DEF(IO)
+PCOUNTER_DEF(EPWAIT)
 PCOUNTER_DEF(END)
 #endif
 
@@ -87,7 +89,19 @@ private:
 
 inline PCounterSet& get_pcounter_set() { static PCounterSet pcounter_set; return pcounter_set; }
 inline PCounterMonitor& get_pcounter_monitor() { static PCounterMonitor pcounter_monitor(get_pcounter_set(), 1000000); return pcounter_monitor; }
+
+class PCounterProfile
+{
+public:
+  PCounterProfile(int mod): mod_(mod), start_ts_(get_us()) {}
+  ~PCounterProfile() { get_pcounter_set().add(mod_, get_us() - start_ts_); }
+private:
+  int mod_;
+  int64_t start_ts_;
+};
+
 #define PC_ADD(mod, x) get_pcounter_set().add(PCOUNTER_ ## mod, x)
+#define PC_PROFILE(mod) PCounterProfile profile##mod(PCOUNTER_ ## mod)
 #define PC_REPORT() get_pcounter_monitor().report()
 
 #endif /* __OB_AX_PCOUNTER_H__ */

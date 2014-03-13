@@ -4,14 +4,14 @@
 class AxApp
 {
 public:
-  int echo_server(int port) {
+  int echo_server(int port, int thread_num) {
     int err = AX_SUCCESS;
     EchoServer* server = NULL;
     if (NULL == (server = get_echo_server()))
     {
       err = AX_NO_MEM;
     }
-    else if (AX_SUCCESS != (err = server->init(port, 1)))
+    else if (AX_SUCCESS != (err = server->init(port, thread_num)))
     {
       MLOG(ERROR, "echo server init fail, err=%d", err);
     }
@@ -237,7 +237,7 @@ protected:
 };
 
 const char* __usages__ = "Usages:\n"
-  "\tax echo_server port\n"
+  "\tax echo_server port thread_num\n"
   "\tax echo_client server\n"
   "\tax start workdir\n"
   "\tax bootstrap workdir\n"
@@ -257,7 +257,7 @@ int main(int argc, char** argv)
 {
   int err = AX_CMD_ARGS_NOT_MATCH;
   AxApp app;
-  define_cmd_call(app.echo_server, IntArg(port));
+  define_cmd_call(app.echo_server, IntArg(port), IntArg(thread_num, "1"));
   define_cmd_call(app.echo_client, StrArg(server));
   define_cmd_call(app.bootstrap, StrArg(workdir));
   define_cmd_call(app.start, StrArg(workdir));
