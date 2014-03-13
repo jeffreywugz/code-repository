@@ -1,6 +1,8 @@
 #ifndef __OB_AX_ECHO_SERVER_H__
 #define __OB_AX_ECHO_SERVER_H__
 #include "nio.h"
+#include "utils.h"
+#include "pcounter.h"
 
 class EchoHandler: public PacketHandler
 {
@@ -43,7 +45,7 @@ public:
     }
     if (NULL != pkt)
     {
-      FAA(&send_cnt_, 1);
+      PC_ADD(RPKT, 1);
       //MLOG(INFO, "receive pkt: len=%d content=%s", pkt->len_, pkt->payload_);
     }
     return err;
@@ -81,6 +83,7 @@ public:
     int err = AX_SUCCESS;
     while(!stop_) {
       nio_.sched(100 * 1000);
+      PC_REPORT();
     }
     return err;
   }

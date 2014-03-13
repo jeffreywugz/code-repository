@@ -1,5 +1,5 @@
-#include "ax.h"
 #include "echo_server.h"
+#include "ax.h"
 
 class AxApp
 {
@@ -21,6 +21,16 @@ public:
     }
     else
     {
+      Server server_addr;
+      server_addr.ip_ = inet_addr("127.0.0.1");
+      server_addr.port_ = port;
+      char buf[32] = "hello,world!";
+      Packet pkt;
+      pkt.set_buf(buf, strlen(buf));
+      if (AX_SUCCESS != (err = server->get_nio().send_packet(server_addr, &pkt)))
+      {
+        MLOG(ERROR, "send_first packet");
+      }
       server->wait();
     }
     return err;
