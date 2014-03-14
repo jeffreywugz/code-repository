@@ -6,8 +6,8 @@ ld = $(gcc-bin-dir)/g++
 # cxx = g++
 # ld = g++
 cpp = $(cxx) -E 
-cxxflags = -Wall -Werror -g -fno-inline-functions
-ldflags = -g -lpthread
+cxxflags = -Wall -Werror -g -fno-inline-functions -O2 -fno-strict-aliasing
+ldflags = -g -lpthread -O2
 .PHONY: all run clean dep
 
 srcs= $(wildcard *.cpp)

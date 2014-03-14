@@ -188,6 +188,7 @@ public:
   int fetch(Server server, Sock*& sock) {
     int err = AX_SUCCESS;
     struct sockaddr_in sin;
+    uint64_t server_id = server.get_id();
     Id id = INVALID_ID;
     bool locked = false;
     sock = NULL;
@@ -199,7 +200,7 @@ public:
     {
       err = AX_NOT_INIT;
     }
-    else if (AX_SUCCESS != (err = cache_.lock(*(uint64_t*)(&server), (void*&)id)))
+    else if (AX_SUCCESS != (err = cache_.lock(server_id, (void*&)id)))
     {
       locked = true;
     }
@@ -227,7 +228,7 @@ public:
     }
     if (locked)
     {
-      cache_.unlock(*(uint64_t*)(&server), (void*)id);
+      cache_.unlock(server_id, (void*)id);
     }
     return err;
   }

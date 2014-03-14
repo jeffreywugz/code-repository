@@ -129,6 +129,7 @@ struct Server
   Server(): ip_(0), port_(0) {}
   ~Server() {}
   bool is_valid() const { return port_ > 0; }
+  uint64_t get_id() const { return *(uint64_t*)this; }
   int parse(const char* spec) {
     int err = AX_SUCCESS;
     char* p = NULL;
