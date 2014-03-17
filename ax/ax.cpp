@@ -1,73 +1,8 @@
-#include "echo_server.h"
 #include "ax.h"
 
 class AxApp
 {
 public:
-  int echo_server(int port, int thread_num) {
-    int err = AX_SUCCESS;
-    EchoServer* server = NULL;
-    if (NULL == (server = get_echo_server()))
-    {
-      err = AX_NO_MEM;
-    }
-    else if (AX_SUCCESS != (err = server->init(port, thread_num)))
-    {
-      MLOG(ERROR, "echo server init fail, err=%d", err);
-    }
-    else if (AX_SUCCESS != (err = server->start()))
-    {
-      MLOG(ERROR, "start()=>%d", err);
-    }
-    else
-    {
-      Server server_addr;
-      server_addr.ip_ = inet_addr("127.0.0.1");
-      server_addr.port_ = port;
-      char buf[32] = "hello,world!";
-      Packet pkt;
-      pkt.set_buf(buf, strlen(buf));
-      if (AX_SUCCESS != (err = server->get_nio().send_packet(server_addr, &pkt)))
-      {
-        MLOG(ERROR, "send_first packet");
-      }
-      server->wait();
-    }
-    return err;
-  }
-  int echo_client(const char* server_addr_spec) {
-    int err = AX_SUCCESS;
-    EchoServer* server = NULL;
-    Server server_addr;
-    if (AX_SUCCESS != (err = server_addr.parse(server_addr_spec)))
-    {
-      MLOG(ERROR, "invalid server addr: %s", server_addr_spec);
-    }
-    else if (NULL == (server = get_echo_server()))
-    {
-      err = AX_NO_MEM;
-    }
-    else if (AX_SUCCESS != (err = server->init(0, 1)))
-    {
-      MLOG(ERROR, "echo server init fail, err=%d", err);
-    }
-    else if (AX_SUCCESS != (err = server->start()))
-    {
-      MLOG(ERROR, "start()=>%d", err);
-    }
-    else
-    {
-      char buf[32];
-      Packet pkt;
-      while(AX_SUCCESS == err && NULL != fgets(buf, sizeof(buf), stdin))
-      {
-        pkt.set_buf(buf, strlen(buf));
-        err = server->get_nio().send_packet(server_addr, &pkt);
-      }
-      server->wait();
-    }
-    return err;
-  }
   int bootstrap(const char* workdir) {
     int err = AX_SUCCESS;
     AxLogServer* server = NULL;
@@ -222,10 +157,6 @@ public:
     return err;
   }
 protected:
-  EchoServer* get_echo_server() {
-    static EchoServer server;
-    return &server;
-  }
   AxLogServer* get_server() {
     static AxLogServer server;
     return &server;
@@ -237,8 +168,6 @@ protected:
 };
 
 const char* __usages__ = "Usages:\n"
-  "\tax echo_server port thread_num\n"
-  "\tax echo_client server\n"
   "\tax start workdir\n"
   "\tax bootstrap workdir\n"
   "\tax start_group leader_ip:leader_port ip1:port1,ip2:port2...\n"
@@ -257,8 +186,6 @@ int main(int argc, char** argv)
 {
   int err = AX_CMD_ARGS_NOT_MATCH;
   AxApp app;
-  define_cmd_call(app.echo_server, IntArg(port), IntArg(thread_num, "1"));
-  define_cmd_call(app.echo_client, StrArg(server));
   define_cmd_call(app.bootstrap, StrArg(workdir));
   define_cmd_call(app.start, StrArg(workdir));
   define_cmd_call(app.start_group, StrArg(leader), StrArg(server_list));

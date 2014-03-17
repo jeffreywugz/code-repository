@@ -10,7 +10,14 @@ public:
   void free(void* p) { UNUSED(p); }
   void* alloc(const int64_t size){ return alloca(size); }
 };
-extern Alloca __alloca__;
+Alloca __alloca__ WEAK_SYM;
+
+inline char* safe_strncpy(char* dest, const char* src, int64_t len)
+{
+  strncpy(dest, src, len);
+  dest[len - 1] = 0;
+  return dest;
+}
 
 template<typename Allocator, typename T>
 T* new_obj(Allocator& allocator, T*& obj)

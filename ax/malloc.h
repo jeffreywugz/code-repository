@@ -110,4 +110,20 @@ private:
   MallocModSet mod_set_;
 };
 
+inline MemAllocator& get_global_mem_allocator()
+{
+  static MemAllocator allocator;
+  return allocator;
+}
+
+inline void* ax_malloc(size_t size, int mod_id)
+{
+  return get_global_mem_allocator().alloc(size, mod_id);
+}
+
+inline void ax_free(void* p)
+{
+  get_global_mem_allocator().free(p);
+}
+
 #endif /* __OB_AX_MALLOC_H__ */

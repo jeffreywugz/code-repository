@@ -1,25 +1,21 @@
-target = ax
+target = echo_server
 gcc-bin-dir = /home/yuanqi.xhf/gcc/bin
-run-args = echo_server 5678
+run-args = 5678 1
 cxx = $(gcc-bin-dir)/g++
 ld = $(gcc-bin-dir)/g++
-# cxx = g++
-# ld = g++
 cpp = $(cxx) -E 
-cxxflags = -Wall -Werror -g -fno-inline-functions -O2 -fno-strict-aliasing
+cxxflags = -Wall -Werror -g -O2 -fno-strict-aliasing
 ldflags = -g -lpthread -O2
 .PHONY: all run clean dep
 
-srcs= $(wildcard *.cpp)
-objs= $(patsubst %.cpp,%.o,$(srcs))
+srcs = $(wildcard *.cpp)
+exes = $(patsubst %.cpp,%,$(srcs))
 
 all: test
 test: $(target)
 	./$(target) $(run-args)
-$(target): $(objs)
-	$(ld) -o $@ $(ldflags) $^
-%.o: %.cpp
-	$(cxx) -c  $(cxxflags) $<
+$(exes): %: %.cpp
+	$(cxx) -o $@ $(cxxflags) $(ldflags) $^
 clean:
 	rm -rf $(target) *.o *~ .dep
 dep:

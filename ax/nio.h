@@ -308,6 +308,10 @@ struct Packet: public LinkNode
 {
   Packet(): len_(0), checksum_(0) {}
   ~Packet() {}
+  void reset() {
+    len_ = 0;
+    checksum_ = 0;
+  }
   bool is_done(int64_t offset) {
     return get_remain(offset) <= 0;
   }
