@@ -1,37 +1,36 @@
 #ifndef __OB_AX_OBJ_POOL_H__
 #define __OB_AX_OBJ_POOL_H__
-#include "malloc.h"
+#include "common.h"
 #include "spin_queue.h"
 
 template<typename T>
 class ObjPool
 {
 public:
-  typedef SpinQueue ObjQueue;
+  typedef SpinQueue FreeList;
 public:
   ObjPool() {}
   ~ObjPool() { destroy(); }
 public:
-  int init(int64_t count, int mod_id) {
+  int init(int64_t capacity, char* buf) {
     int err = AX_SUCCESS;
-    if (count <= 0)
+    if (capacity <= 0 || NULL == buf)
     {
       err = AX_INVALID_ARGUMENT;
     }
-    else if (AX_SUCCESS != (err = free_list_.init(count)))
+    else if (AX_SUCCESS != (err = free_list_.init(capacity, buf)))
     {}
-    else if (NULL == (obj_buf_ = (T*)ax_malloc(sizeof(T) * count, mod_id)))
+    else
     {
-      err = AX_ALLOCATE_MEMORY_FAILED;
-    }
-    for(int64_t i = 0; AX_SUCCESS == err && i < count; i++)
-    {
-      T* obj = obj_buf_ + i;
-      if (AX_SUCCESS != (err = free_list_.push(obj)))
-      {}
-      else
+      T* obj = (T*)(buf + free_list_.calc_mem_usage(capacity));
+      for(int64_t i = 0; AX_SUCCESS == err && i < capacity; i++)
       {
-        new(obj)T();
+        if (AX_SUCCESS != (err = free_list_.push(obj + i)))
+        {}
+        else
+        {
+          new(obj)T();
+        }
       }
     }
     if (AX_SUCCESS != err)
@@ -40,23 +39,21 @@ public:
     }
     return err;
   }
+  int64_t calc_mem_usage(int64_t capacity) {
+    return sizeof(T) * capacity + free_list_.calc_mem_usage(capacity);
+  }
   void destroy() {
     int err = AX_SUCCESS;
     T* obj = NULL;
-    while(AX_SUCCESS == (err = free_list_.pop(obj)))
+    while(AX_SUCCESS == (err = free_list_.pop((void*&)obj)))
     {
       obj->~T();
-    }
-    if (NULL != obj_buf_)
-    {
-      ax_free(obj_buf_);
-      obj_buf_ = NULL;
     }
   }
   T* alloc() {
     int err = AX_SUCCESS;
     T* obj = NULL;
-    if (AX_SUCCESS != (err = free_list_.pop(obj)))
+    if (AX_SUCCESS != (err = free_list_.pop((void*&)obj)))
     {}
     else
     {
@@ -68,12 +65,11 @@ public:
     int err = AX_SUCCESS;
     if (AX_SUCCESS != (err = free_list_.push(obj)))
     {
-      AX_LOG(ERROR, "free_list.push(%p)=>%d", obj, err);
+      MLOG(ERROR, "free_list.push(%p)=>%d", obj, err);
     }
   }
 private:
-  T* obj_buf_;
-  ObjQueue free_list_;
+  FreeList free_list_;
 };
 
 #endif /* __OB_AX_OBJ_POOL_H__ */

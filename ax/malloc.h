@@ -116,7 +116,7 @@ inline MemAllocator& get_global_mem_allocator()
   return allocator;
 }
 
-inline void* ax_malloc(size_t size, int mod_id)
+inline void* ax_alloc(size_t size, int mod_id)
 {
   return get_global_mem_allocator().alloc(size, mod_id);
 }

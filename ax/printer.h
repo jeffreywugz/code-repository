@@ -6,7 +6,7 @@ class Printer
 {
 public:
   Printer(int64_t buf_size = 4096): buf_(NULL), limit_(0), pos_(0) {
-    char* buf = (char*)ax_malloc(buf_size);
+    char* buf = (char*)ax_alloc(buf_size);
     if (NULL != buf)
     {
       buf_ = buf;

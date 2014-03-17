@@ -1,29 +1,35 @@
 #include "nio.h"
 #include "utils.h"
 #include "pcounter.h"
+#include "obj_pool.h"
 
 class EchoHandler: public PacketHandler
 {
+public:
+  typedef ObjPool<Packet> PacketPool;
 public:
   EchoHandler() {}
   virtual ~EchoHandler() {}
 public:
   int init(Nio* nio, int64_t max_pkt_num) {
     int err = AX_SUCCESS;
-    UNUSED(max_pkt_num);
     nio_ = nio;
+    err = pkt_pool_.init(max_pkt_num, allocator_.alloc(pkt_pool_.calc_mem_usage(max_pkt_num)));
     return err;
   }
   int alloc_packet(Packet*& pkt) {
     int err = AX_SUCCESS;
-    pkt = new Packet();
+    if (NULL == (pkt = pkt_pool_.alloc()))
+    {
+      err = AX_NO_MEM;
+    }
     return err;
   }
   int free_packet(Packet* pkt) {
     int err = AX_SUCCESS;
     if (NULL != pkt)
     {
-      delete pkt;
+      pkt_pool_.free(pkt);
     }
     return err;
   }
@@ -50,6 +56,8 @@ public:
   }
 private:
   Nio* nio_;
+  MallocGuard allocator_;
+  PacketPool pkt_pool_;
 };
 
 class EchoServer
@@ -66,7 +74,7 @@ public:
     {
       MLOG(ERROR, "handler.init()=>%d", err);
     }
-    else if (AX_SUCCESS != (err = nio_.init(&handler_, port, capacity, (char*)ax_malloc(nio_.calc_mem_usage(capacity)))))
+    else if (AX_SUCCESS != (err = nio_.init(&handler_, port, capacity, (char*)ax_alloc(nio_.calc_mem_usage(capacity)))))
     {
       MLOG(ERROR, "io_sched.init()=>%d", err);
     }

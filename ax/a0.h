@@ -207,6 +207,10 @@ inline int64_t get_us()
   return time_val.tv_sec*1000000 + time_val.tv_usec;
 }
 
+
+void* ax_alloc(size_t size, int mod_id=0);
+void ax_free(void* p);
+
 struct MemChunkCutter
 {
   MemChunkCutter(int64_t limit, char* buf): limit_(limit), used_(0), buf_(buf) {}
@@ -229,13 +233,32 @@ struct MemChunkCutter
   char* buf_;
 };
 
+class MallocGuard
+{
+public:
+  MallocGuard() {
+    memset(allocated_, 0, sizeof(allocated_));
+  }
+  ~MallocGuard() {
+    for(int i = 0; i < (int)arrlen(allocated_); i++)
+    {
+      if (allocated_[i])
+      {
+        ax_free(allocated_[i]);
+      }
+    }
+  }
+  char* alloc(int64_t size, int mod=0) {
+    return (char*)ax_alloc(size, mod);
+  }
+private:
+  char* allocated_[16];
+};
+
 template<typename T, typename Allocator>
 int init_container(T& t, int64_t capacity, Allocator& allocator)
 {
   return t.init(capacity, allocator.alloc(t.calc_mem_usage(capacity)));
 }
-
-void* ax_malloc(size_t size, int mod_id=0);
-void ax_free(void* p);
 
 #endif /* __OB_AX_A0_H__ */
