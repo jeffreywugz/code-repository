@@ -201,9 +201,13 @@ public:
       err = AX_NOT_INIT;
     }
     else if (AX_SUCCESS != (err = cache_.lock(server_id, (void*&)id)))
+    {}
+    else
     {
       locked = true;
     }
+    if (AX_SUCCESS != err)
+    {}
     else if (INVALID_ID != id && AX_SUCCESS == (err = sched_->fetch(id, (Sock*&)sock)))
     {}
     else if (AX_SUCCESS != (err = connect(make_sockaddr(&sin, server.ip_, server.port_), sock)))
@@ -362,10 +366,16 @@ struct Packet: public LinkNode
     }
     return err;
   }
+  int64_t limit_;
   char header_[0];
   uint32_t len_;
   uint32_t checksum_;
-  char payload_[1024];
+  Server src_;
+  int pcode_;
+  int64_t start_time_;
+  int64_t end_time_;
+  int err_;
+  char payload_[0];
 };
 
 class PacketHandler
@@ -392,14 +402,34 @@ struct TcpSock: public Sock
   int clone(Sock*& other) {
     int err = AX_SUCCESS;
     TcpSock* new_sock = new TcpSock();
-    new_sock->pkt_handler_ = pkt_handler_;
-    other = new_sock;
+    if (NULL != new_sock)
+    {
+      new_sock->pkt_handler_ = pkt_handler_;
+      other = new_sock;
+      PC_ADD(CONN, 1);
+    }
     return err;
   }
   int destroy() {
     int err = AX_SUCCESS;
+    Packet* pkt = NULL;
     Sock::destroy();
+    while(AX_SUCCESS == send_queue_.pop((LinkNode*&)pkt))
+    {
+      free_packet(pkt);
+    }
+    if (NULL != reading_pkt_)
+    {
+      free_packet(reading_pkt_);
+      reading_pkt_ = NULL;
+    }
+    if (NULL != writing_pkt_)
+    {
+      free_packet(writing_pkt_);
+      writing_pkt_ = NULL;
+    }
     delete this;
+    PC_ADD(CONN, -1);
     return err;
   }
   virtual bool kill() {
@@ -487,7 +517,6 @@ struct TcpSock: public Sock
           {
             err = AX_EAGAIN;
           }
-          //MLOG(INFO, "fd=%d write: %.*s wbytes=%ld err=%d", fd_, wbytes, buf, wbytes, err);
           write_done(wbytes);
         }
       }
@@ -496,9 +525,19 @@ struct TcpSock: public Sock
   }
 
   int alloc_packet(Packet*& pkt) {
-    return NULL == pkt_handler_? AX_NOT_INIT: pkt_handler_->alloc_packet(pkt);
+    int err = AX_SUCCESS;
+    err = (NULL == pkt_handler_? AX_NOT_INIT: pkt_handler_->alloc_packet(pkt));
+    if (AX_SUCCESS == err)
+    {
+      PC_ADD(UPKT, 1);
+    }
+    return err;
   }
   int free_packet(Packet*& pkt) {
+    if (NULL != pkt)
+    {
+      PC_ADD(UPKT, -1);
+    }
     return NULL == pkt_handler_? AX_NOT_INIT: pkt_handler_->free_packet(pkt);
   }
   int handle_packet(Packet* pkt) {

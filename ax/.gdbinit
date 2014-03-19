@@ -1,2 +1,2 @@
-file ax
-set args echo_server 5678
+file clock_server 
+set args 5678

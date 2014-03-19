@@ -1,9 +1,11 @@
 #ifdef PCOUNTER_DEF
-PCOUNTER_DEF(RPKT)
-PCOUNTER_DEF(IO)
-PCOUNTER_DEF(EPWAIT)
-PCOUNTER_DEF(EVWAKE)
-PCOUNTER_DEF(END)
+PCOUNTER_DEF(CONN, 0)
+PCOUNTER_DEF(UPKT, 0)
+PCOUNTER_DEF(RPKT, 0)
+PCOUNTER_DEF(IO, -1)
+PCOUNTER_DEF(EPWAIT, -1)
+PCOUNTER_DEF(EVWAKE, -1)
+PCOUNTER_DEF(END, -1)
 #endif
 
 #ifndef __OB_AX_PCOUNTER_H__
@@ -12,20 +14,25 @@ PCOUNTER_DEF(END)
 
 enum
 {
-#define PCOUNTER_DEF(name) PCOUNTER_ ## name,
+#define PCOUNTER_DEF(name, level) PCOUNTER_ ## name,
 #include __FILE__
 #undef PCOUNTER_DEF
   PCOUNTER_COUNT = PCOUNTER_END,
 };
 
-inline const char* get_pcounter_name(int mod)
+struct PCounterDesc
 {
-  const static char* names[] = {
-#define PCOUNTER_DEF(name) #name,
+  const char* name_;
+  int level_;
+};
+inline const PCounterDesc* get_pcounter_desc(int mod)
+{
+  const static PCounterDesc desc[] = {
+#define PCOUNTER_DEF(name, level) {#name, level},
 #include __FILE__
 #undef PCOUNTER_DEF
   };
-  return names[mod];
+  return desc + mod;
 }
 
 class PCounterSet
@@ -71,8 +78,13 @@ public:
       }
       for(int i = 0; i < PCOUNTER_COUNT; i++)
       {
+        const PCounterDesc* desc = get_pcounter_desc(i);
         counters_[cur_set_idx][i] = pcounter_set_.get(i);
-        printer.append("%s:%6ld ", get_pcounter_name(i), (counters_[cur_set_idx][i] - counters_[last_set_idx][i]) * 1000000/(cur_time - last_report_time));
+        if (desc->level_ >= 0)
+        {
+          printer.append("%s:%6ld ", desc->name_,
+                         desc->level_ == 1 ? (counters_[cur_set_idx][i] - counters_[last_set_idx][i]) * 1000000/(cur_time - last_report_time): counters_[cur_set_idx][i]);
+        }
       }
       MLOG(INFO, "PC[%3ld] %s", report_seq_, printer.get_str());
       report_seq_++;

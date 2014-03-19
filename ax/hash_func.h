@@ -1,5 +1,6 @@
 #ifndef __OB_AX_HASH_FUNC_H__
 #define __OB_AX_HASH_FUNC_H__
+#include <stdint.h>
 
 inline uint32_t murmurhash2(const void *key, int32_t len, uint32_t seed)
 {

@@ -39,10 +39,12 @@ ERRNO_DEF(FCNTL_ERR, -1100, "fcntl fail")
 #endif
 
 #ifdef PCODE_DEF
+PCODE_DEF(RESPONSE, 0, "response")
 PCODE_DEF(PING, 1, "ping")
 PCODE_DEF(SET_LOG_LEVEL, 2, "set log level")
 PCODE_DEF(SET_RUN_MODE, 3, "set run mode")
 PCODE_DEF(INSPECT, 4, "inspect")
+PCODE_DEF(CLOCK_GET, 4, "get clock")
 #endif
 
 #ifndef __OB_AX_A0_H__
@@ -71,6 +73,8 @@ PCODE_DEF(INSPECT, 4, "inspect")
 #define DIO_ALIGN_SIZE 512
 #define arrlen(x) (sizeof(x)/sizeof(x[0]))
 #define strbool(x) ((x)?"true":"false")
+#define DLOG(prefix, format, ...) if (__enable_dlog__) {int64_t cur_ts = get_us(); fprintf(stderr, "[%ld.%.6ld] %s %s:%d [%ld] " format "\n", cur_ts/1000000, cur_ts%1000000, #prefix, __FILE__, __LINE__, pthread_self(), ##__VA_ARGS__); }
+bool __enable_dlog__ WEAK_SYM;
 
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>

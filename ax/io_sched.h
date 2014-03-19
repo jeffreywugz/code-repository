@@ -449,6 +449,7 @@ public:
       else
       {
         bool can_kill = sock->kill();
+        DLOG(TRY_KILL, "id=%lx can_kill=%s", id, strbool(can_kill));
         sock_map_.revert(id);
         if (can_kill)
         {

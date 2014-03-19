@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include <stdio.h>
 #include <execinfo.h>
 inline char* parray(char* buf, int64_t len, int64_t* array, int size)
 {

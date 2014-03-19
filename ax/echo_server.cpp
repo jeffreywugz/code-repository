@@ -3,10 +3,15 @@
 #include "pcounter.h"
 #include "obj_pool.h"
 
+struct EchoPacket: public Packet
+{
+  char buf[1024];
+};
+
 class EchoHandler: public PacketHandler
 {
 public:
-  typedef ObjPool<Packet> PacketPool;
+  typedef ObjPool<EchoPacket> PacketPool;
 public:
   EchoHandler() {}
   virtual ~EchoHandler() {}
@@ -29,7 +34,7 @@ public:
     int err = AX_SUCCESS;
     if (NULL != pkt)
     {
-      pkt_pool_.free(pkt);
+      pkt_pool_.free((EchoPacket*)pkt);
     }
     return err;
   }

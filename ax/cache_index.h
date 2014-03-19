@@ -76,6 +76,7 @@ public:
   int64_t idx(int64_t x) { return x & (capacity_ - 1); }
   int lock(key_t key, value_t& value) {
     int err = AX_SUCCESS;
+    DLOG(CACHE, "lock: key=%lx value=%p", key, value);
     if (NULL == slots_)
     {
       err = AX_NOT_INIT;
@@ -99,6 +100,7 @@ public:
       {}
       else
       {
+        found_item->key_ = key;
         found_item->value_ = value;
         found_item->next_ = slot->head_;
         slot->head_ = found_item;
@@ -113,6 +115,7 @@ public:
   }
   int unlock(key_t key, value_t value) {
     int err = AX_NOT_EXIST;
+    DLOG(CACHE, "unlock: key=%lx value=%p", key, value);
     if (NULL == slots_)
     {
       err = AX_NOT_INIT;

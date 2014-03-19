@@ -1,11 +1,11 @@
-target = echo_server
+target = clock_server
 gcc-bin-dir = /home/yuanqi.xhf/gcc/bin
-run-args = 5678 1
+run-args = 5678
 cxx = $(gcc-bin-dir)/g++
 ld = $(gcc-bin-dir)/g++
 cpp = $(cxx) -E 
-cxxflags = -Wall -Werror -g -O2 -fno-strict-aliasing
-ldflags = -g -lpthread -O2
+cxxflags = -Wall -Werror -g -fno-strict-aliasing
+ldflags = -g -lpthread
 .PHONY: all run clean dep
 
 srcs = $(wildcard *.cpp)
@@ -15,11 +15,11 @@ all: test
 test: $(target)
 	./$(target) $(run-args)
 $(exes): %: %.cpp
-	$(cxx) -o $@ $(cxxflags) $(ldflags) $^
+	$(cxx) -o $@ $(cxxflags) $(ldflags) $<
 clean:
 	rm -rf $(target) *.o *~ .dep
 dep:
-	(for f in $(srcs); do echo -n ""; $(cpp) -M -MM -MG $$f; done) >> .dep
+	rm -f .dep && (for f in $(srcs); do $(cpp) -M -MM -MG $$f |sed 's/\.o:/:/'; done) >> .dep
 
 ### Dependencies:
 -include .dep
