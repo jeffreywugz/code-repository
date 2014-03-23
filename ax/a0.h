@@ -38,6 +38,12 @@ ERRNO_DEF(EVENTFD_CREATE_ERR, -1020, "eventfd create fail")
 ERRNO_DEF(EVENTFD_IO_ERR, -1021, "eventfd create fail")
 ERRNO_DEF(PTHREAD_KEY_CREATE_ERR, -1040, "pthread_key_create fail")
 ERRNO_DEF(FCNTL_ERR, -1100, "fcntl fail")
+
+ERRNO_DEF(TERM_NOT_MATCH, -4000, "term not match")
+ERRNO_DEF(TERM_STALE, -4001, "term stale")
+ERRNO_DEF(CURSOR_LAGGED, -4002, "cursor lagged")
+ERRNO_DEF(CURSOR_NOT_MATCH, -4003, "cursor lagged")
+ERRNO_DEF(VOTE_OTHER, -4004, "vote other")
 #endif
 
 #ifdef PCODE_DEF
@@ -93,93 +99,14 @@ bool __enable_dlog__ WEAK_SYM;
 #include <sys/syscall.h>
 #include <linux/futex.h>
 #include <new>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 
 typedef uint64_t Id;
 #define INVALID_ID (~0ul)
-// basic struct define
-struct Buffer
-{
-  Buffer(): limit_(0), used_(0), buf_(NULL) {}
-  ~Buffer() {}
-  int parse(const char* spec) {
-    int err = AX_SUCCESS;
-    limit_ = used_ = strlen(spec);
-    buf_ = (char*)spec;
-    return err;
-  }
-
-  void dump() {
-    fprintf(stderr, "dump buffer: limit=%ld used=%ld", limit_, used_);
-  }
-  uint64_t limit_;
-  uint64_t used_;
-  char* buf_;
-};
-
-#include "crc.h"
-struct Record
-{
-  Record(): checksum_(0), magic_(0), len_(0), id_(0) {}
-  ~Record() {}
-  void set(uint32_t magic, uint32_t len, char* buf, uint64_t id) {
-    magic_ = magic;
-    len_ = len;
-    id_ = id;
-    memcpy(buf_, buf, len);
-  }
-  uint32_t get_record_len() const { return len_ + sizeof(*this); }
-  uint64_t do_calc_checksum() const { return crc64_sse42(magic_, (const char*)&magic_, (int64_t)get_record_len());}
-  void calc_checksum() { checksum_ = do_calc_checksum();}
-  bool check_checksum(uint32_t magic) const { return magic_ == magic && checksum_ == do_calc_checksum(); }
-  uint64_t checksum_;
-  uint32_t magic_;
-  uint32_t len_;
-  uint64_t id_;
-  char buf_[0];
-};
 
 inline int64_t min(int64_t x, int64_t y)
 {
   return ((x > y)? y: x);
 }
-
-struct Server
-{
-  Server(): ip_(0), port_(0) {}
-  ~Server() {}
-  bool is_valid() const { return port_ > 0; }
-  uint64_t get_id() const { return *(uint64_t*)this; }
-  int parse(const char* spec) {
-    int err = AX_SUCCESS;
-    char* p = NULL;
-    char ip[64] = "";
-    if (NULL == spec)
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if (NULL == (p = strchr(const_cast<char*> (spec), ':')))
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else if (p - spec + 1 > (int64_t)sizeof(ip))
-    {
-      err = AX_INVALID_ARGUMENT;
-    }
-    else
-    {
-      strncpy(ip, spec, min(p - spec, (int64_t)sizeof(ip)));
-      ip[p - spec] = 0;
-      ip_ = inet_addr(ip);
-      port_ = atoi(p+1);
-    }
-    return err;
-  }
-  uint32_t ip_;
-  uint32_t port_;
-};
 
 #define futex(...) syscall(SYS_futex,__VA_ARGS__)
 
@@ -227,7 +154,6 @@ inline int64_t get_us()
   gettimeofday(&time_val, NULL);
   return time_val.tv_sec*1000000 + time_val.tv_usec;
 }
-
 
 void* ax_alloc(size_t size, int mod_id=0);
 void ax_free(void* p);

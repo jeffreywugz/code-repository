@@ -1,6 +1,6 @@
-target = log_server
+target = ax
 gcc-bin-dir = /home/yuanqi.xhf/gcc/bin
-run-args = 5678
+run-args = format workdir 10.232.36.4:5678
 cxx = $(gcc-bin-dir)/g++
 ld = $(gcc-bin-dir)/g++
 cpp = $(cxx) -E 

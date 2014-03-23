@@ -52,10 +52,10 @@ public:
     va_list ap;
     va_start(ap, format);
     if (NULL != buf_ && limit_ > 0 && pos_ < limit_
-        && pos_ + (count = vsnprintf(buf_ + pos_, limit_ - pos_, format, ap)) < limit_)
+        && pos_ + (count = vsnprintf(buf_ + pos_, limit_ - pos_, format, ap)) + 1 < limit_)
     {
       src = buf_ + pos_;
-      pos_ += count;
+      pos_ += count + 1;
     }
     va_end(ap);
     return src;
@@ -73,7 +73,7 @@ inline Printer& get_tl_printer()
 }
 
 template<typename T>
-char* repr(T& t)
+const char* repr(T& t)
 {
   return t.repr(get_tl_printer());
 }
