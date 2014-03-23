@@ -20,6 +20,8 @@ ERRNO_DEF(CALLBACK_NOT_SET, -28, "callback not set")
 ERRNO_DEF(ID_NOT_MATCH, -29, "id_map id not match")
 ERRNO_DEF(NIO_CAN_NOT_LOCK, -30, "nio can not lock")
 ERRNO_DEF(PKT_CHECKSUM_ERR, -30, "nio can not lock")
+ERRNO_DEF(DATA_ERR, -31, "data error")
+ERRNO_DEF(SEQ_OVERFLOW, -32, "seq overflow")
 
 ERRNO_DEF(EPOLL_CREATE_ERR, -1000, "epoll create fail")
 ERRNO_DEF(EPOLL_WAIT_ERR, -1001, "epoll wait fail")
@@ -117,11 +119,26 @@ struct Buffer
   char* buf_;
 };
 
-struct RecordHeader
+#include "crc.h"
+struct Record
 {
+  Record(): checksum_(0), magic_(0), len_(0), id_(0) {}
+  ~Record() {}
+  void set(uint32_t magic, uint32_t len, char* buf, uint64_t id) {
+    magic_ = magic;
+    len_ = len;
+    id_ = id;
+    memcpy(buf_, buf, len);
+  }
+  uint32_t get_record_len() const { return len_ + sizeof(*this); }
+  uint64_t do_calc_checksum() const { return crc64_sse42(magic_, (const char*)&magic_, (int64_t)get_record_len());}
+  void calc_checksum() { checksum_ = do_calc_checksum();}
+  bool check_checksum(uint32_t magic) const { return magic_ == magic && checksum_ == do_calc_checksum(); }
+  uint64_t checksum_;
   uint32_t magic_;
   uint32_t len_;
-  uint64_t checksum_;
+  uint64_t id_;
+  char buf_[0];
 };
 
 inline int64_t min(int64_t x, int64_t y)

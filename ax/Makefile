@@ -1,4 +1,4 @@
-target = clock_server
+target = log_server
 gcc-bin-dir = /home/yuanqi.xhf/gcc/bin
 run-args = 5678
 cxx = $(gcc-bin-dir)/g++

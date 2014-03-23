@@ -36,6 +36,26 @@ struct SpinLock
 
 struct RWLock
 {
+  struct ReadGuard
+  {
+    ReadGuard(RWLock& lock): lock_(lock) {
+      lock_.rdlock();
+    }
+    ~ReadGuard() {
+      lock_.rdunlock();
+    }
+    RWLock& lock_;
+  };
+  struct WriteGuard
+  {
+    WriteGuard(RWLock& lock): lock_(lock) {
+      lock_.wrlock();
+    }
+    ~WriteGuard() {
+      lock_.wrunlock();
+    }
+    RWLock& lock_;
+  };
   RWLock(): writer_id_(0), reader_ref_(0) {}
   ~RWLock() {}
   void rdlock() {

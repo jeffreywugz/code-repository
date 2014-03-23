@@ -752,4 +752,35 @@ private:
   TcpSock normal_sock_;
 };
 
+class NioDriver: public IThreadCallable
+{
+public:
+  NioDriver(): stop_(false) {}
+  ~NioDriver(){}
+public:
+  int init(Nio* nio) {
+    int err = AX_SUCCESS;
+    if (NULL == nio)
+    {
+      err = AX_INVALID_ARGUMENT;
+    }
+    else
+    {
+      nio_ = nio;
+    }
+    return err;
+  }
+  int do_thread_work() {
+    int err = AX_SUCCESS;
+    while(NULL != nio_ && !stop_) {
+      nio_->sched(100 * 1000);
+      PC_REPORT();
+    }
+    return err;
+  }
+private:
+  bool stop_;
+  Nio* nio_;
+};
+
 #endif /* __OB_AX_NIO_H__ */
