@@ -17,7 +17,7 @@ class FastSpinLock
   public:
     FastSpinLock() { next_tid_ = 0; tail_.seq_ = ~0; pthread_key_create(&key_, NULL); }
     ~FastSpinLock() { pthread_key_delete(key_); }
-    int lock_and_unlock() {
+    int lock() {
       Item* cur_item = NULL;
       Item prev;
       if (NULL == (cur_item = (Item*)pthread_getspecific(key_)))
@@ -28,17 +28,19 @@ class FastSpinLock
         pthread_setspecific(key_, cur_item);
       }
       prev.value_ = __sync_lock_test_and_set(&tail_.value_, cur_item->value_);
-      volatile uint32_t& seq = item_[prev.tid_].seq_;
-      while(seq == prev.seq_)
+      volatile uint64_t& value = item_[prev.tid_].value_;
+      while(value == prev.value_)
       {
         PAUSE();
       }
-      __sync_synchronize();
-      // lock success
-      __sync_synchronize();
-      cur_item->seq_++;
       return 0;
     }
+  int unlock() {
+    Item* cur_item = NULL;
+    cur_item = (Item*)pthread_getspecific(key_);
+    __sync_fetch_and_add(&cur_item->seq_, 1);
+    return 0;
+  }
   private:
     pthread_key_t key_;
     uint64_t next_tid_ CACHE_ALIGNED;

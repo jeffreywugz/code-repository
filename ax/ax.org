@@ -1,6 +1,90 @@
-#+Title: log replication
+#+Title: AX: a High Available Log Server
 #+Options: toc:nil ^:{}
 
+  ax的目的是实现一个log server. 有以下特点:
+  1. 高可用: 复制协议参考Raft, 协议的正确性被证明。 有关协议的文档参见: 
+  2. 高效: 实现语言是C++。并且实现时多使用无锁数据结构. 有关部分实现效率方面的文档参见:
+  3. 测试充分: 经过长时间随机测试. 有关测试的文档参见:
+
+* 基本概念和功能
+  n个ax server形成一个ax group，一个ax group形成一个逻辑上高可用的log server. log server在逻辑上维护一个append only的超大的log_file.
+
+  log server提供三个接口
+  1. append: 即追加日志
+  2. read: 即指定位置读取日志
+  3. reclaim: 即指定某个位置之前的日志可以丢弃
+
+  关于group:
+  1. 一个ax group内的进程互为备份，任意时刻只要一个group内超过半数的进程存活，这个group就可以工作。
+  2. 一个group内的成员一旦形成就不可更改，只能创建和销毁, 即不能增加或减少group的成员，在实际使用时，可以通过创建新group，销毁老group来实现增减机器的目的。
+  3. 一般情况下log_file被一个group管理，在两个group交接期间，log_file同时被两个group管理的。一个server最多可以同时属于两个活跃的group
+  4. bootstrap时由管理员指定某一个server单独形成一个group，后续可以根据需要变更group
+
+* 编译
+  1. checkout代码:
+     #+begin_src sh
+     git checkout ...
+     #+end_src
+  2. 编译:
+     #+begin_src sh
+     make -j
+     #+end_src
+  3. 编译好之后的文件如下:
+     #+begin_src sh
+     ax # server executable
+     ac # client executable
+     #+end_src
+* 启动单个server的方式
+  0. 选定工作目录和server地址
+     #+begin_src sh
+     export AX_DIR=axdir  # which dir axserver to store data
+     export AX_SVR1=10.232.36.30:8042
+     #+end_src
+     这些变量名没有任何特殊含义，只是在后面的命令中会引用到。
+  1. 创建一个工作目录
+     #+begin_src sh
+     mkdir -p $AX_DIR
+     #+end_src
+  2. 格式化文件
+     #+begin_src sh
+     ./ax format $AX_DIR $AX_SVR1
+     #+end_src
+  3. bootstrap
+     #+begin_src sh
+     ./ax bootstrap $AX_DIR
+     #+end_src
+  4. 启动server
+     #+begin_src sh
+     ./ax start $AX_DIR
+     #+end_src
+* 用client读写
+  1. 读log
+     #+begin_src sh
+     ./ac read $AX_SVR1 0
+     #+end_src
+  2. 写log
+     #+begin_src sh
+     ./ac write $AX_SVR1 1 xxxx
+     #+end_src
+     
+* 更换group
+  假定已经启动了 =AX_SVR1=, 并且准备了一台新机器 =AX_SVR2=
+  1. 格式化并启动 =AX_SVR2=
+     #+begin_src sh
+     mkdir -p $AX_DIR
+     ./ax format $AX_DIR $AX_SVR2
+     ./ax start $AX_DIR
+     #+end_src
+  2. 新增一个 =AX_SVR1,AX_SVR2= 组成的新group
+     #+begin_src sh
+     ./ax start_group $AX_SVR1 $AX_SVR1,$AX_SVR2
+     #+end_src
+  3. 停掉 =AX_SVR1= 组成的老group  
+     #+begin_src sh
+     ./ax stop_group $AX_SVR1,$AX_SVR2 $AX_SVR1
+     #+end_src
+* RPC接口
+  ...
 * COMMENT 定义
   #+begin_src cpp
   struct Cursor

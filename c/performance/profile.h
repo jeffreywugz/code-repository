@@ -16,7 +16,7 @@ int64_t get_usec()
   int64_t start = get_usec(); \
   expr;\
   int64_t end = get_usec();\
-  printf("%s: 1000000*%ld/%ld=%ld\n", #expr, n, end - start, 1000000 * n / (end - start)); \
+  printf("%s: 1000000*%ld/%ld=%'ld\n", #expr, n, end - start, 1000000 * n / (end - start)); \
 }
 
 struct Callable
@@ -30,7 +30,7 @@ typedef void*(*pthread_handler_t)(void*);
 class BaseWorker
 {
   public:
-    static const int64_t MAX_N_THREAD = 16;    
+    static const int64_t MAX_N_THREAD = 1024;    
     struct WorkContext
     {
       WorkContext() : callable_(NULL), idx_(0) {}

@@ -6,10 +6,21 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <unistd.h>
+#define AX_SUCCESS 0
+#define AX_INVALID_ARGUMENT -2
+#define AX_NOT_INIT -6
+#define AX_EAGAIN -23
 #define UNUSED(v) ((void)(v))
+#define FAA(x, i) __sync_fetch_and_add((x), (i))
+#define CAS(x, ov, nv) __sync_bool_compare_and_swap((x), (ov), (nv))
+#define FAS(x, ov) __sync_lock_test_and_set((x), (ov))
+#define AL(x) __atomic_load_n((x), __ATOMIC_SEQ_CST)
+#define AS(x, v) __atomic_store_n((x), (v), __ATOMIC_SEQ_CST)
+#define MBR() __sync_synchronize()
+#define PAUSE() asm("pause;\n")
+
 #define CACHE_ALIGN_SIZE 64
 #define CACHE_ALIGNED __attribute__((aligned(CACHE_ALIGN_SIZE)))
-#define PAUSE() asm("pause\n")
 
 int64_t get_usec()
 {
@@ -41,6 +52,7 @@ struct TCCounter
     int64_t slot_count = (thread_count < MAX_THREAD_NUM)? thread_count: MAX_THREAD_NUM;
     for(int64_t i = 0; i < slot_count; i++)
     {
+      fprintf(stderr, "thread[%ld] = %ld\n", i, items_[i].value_);
       sum += items_[i].value_;
     }
     return sum;
@@ -58,15 +70,15 @@ struct Callable
   bool stop_ CACHE_ALIGNED;
 };
 
-class OneLoopCallable: public Callable
+template<typename T>
+class OneLoopCallable: public Callable, public T
 {
   public:
     OneLoopCallable(){}
-    ~OneLoopCallable(){}
-    virtual int do_once(int64_t idx) = 0;
+    virtual ~OneLoopCallable(){}
     virtual int call(pthread_t thread, int64_t idx) {
       while(!stop_) {
-        if (0 == do_once(idx))
+        if (0 == this->do_once(idx))
         {
           counter_.inc(1);
         }
@@ -74,7 +86,7 @@ class OneLoopCallable: public Callable
       return 0;
     }
     void report(int64_t time_us) {
-      fprintf(stdout, "time=%ldus, ops=%'ld\n", time_us, 1000000 * counter_.value()/time_us);
+      fprintf(stdout, "time=%ldus, ops=%'ld\n", time_us, 1000000L * counter_.value()/time_us);
     }
   protected:
     TCCounter counter_;
@@ -84,7 +96,7 @@ typedef void*(*pthread_handler_t)(void*);
 class BaseWorker
 {
   public:
-    static const int64_t MAX_N_THREAD = 16;    
+    static const int64_t MAX_N_THREAD =1024;
     struct WorkContext
     {
       WorkContext() : callable_(NULL), idx_(0) {}
@@ -153,6 +165,7 @@ class BaseWorker
         }
         else
         {
+          fprintf(stderr, "par_do finished.\n");
           callable->report(time_us);
         }
       }
@@ -190,7 +203,7 @@ int main(int argc, char** argv)
   if (argc != 3)
   {
     err = -EINVAL;
-    fprintf(stderr, "%s n_thread n_item\n", argv[0]);
+    fprintf(stderr, "n_thread=1 time_limit=3 %s n_thread n_item\n", argv[0]);
   }
   else
   {

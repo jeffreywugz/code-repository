@@ -101,4 +101,4 @@ def dinner_order(browser, name, passwd):
 if __name__ == '__main__':
     from Tkinter import *
     browser = Browser()
-    dinner_order(browser, 'yuanqi.xhf', 'assert(ans==42)')
+    dinner_order(browser, 'user', 'passwd')

@@ -4,7 +4,7 @@ int main ()
 {
 	const int N = 10;
 	int i, j, l, sp;
-	nt A[2][N];
+	int A[2][N];
 	for (i = 0, l = 0, sp = N - 1; i < N; i++, l ^= 1, sp--) {
 		A[l][0] = 1;
 		for (j = 1; j < i; j++)

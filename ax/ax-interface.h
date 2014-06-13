@@ -1,12 +1,12 @@
+
+
 class Client
 {
-  int bootstrap(ServerList* servers);
   int stop_group(ServerList* cur_servers, ServerList* servers);
   int start_group(ServerList* cur_servers, ServerList* servers);
   int set_master(ServerList* cur_servers, ServerList* new_master);
   int read(ReadTask& task);
   int write(WriteTask& task);
-  int wait_io();
 };
 
 class StreamStore
