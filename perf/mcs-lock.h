@@ -9,6 +9,7 @@ public:
   {
     Node(): next_(NULL), locked_(1) {}
     ~Node(){}
+    void reset() { next_ = NULL; locked_ = 1; }
     bool is_locked() { return locked_ != 0; }
     Node* volatile next_;
     volatile int64_t locked_;

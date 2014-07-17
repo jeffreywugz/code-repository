@@ -87,7 +87,12 @@
   ...
 * COMMENT 定义
   #+begin_src cpp
-  struct Cursor
+  struct MainRecord
+  {
+    Token
+  };
+
+  struct Tape
   {
   };
   #+end_src

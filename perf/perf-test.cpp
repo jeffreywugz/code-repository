@@ -8,6 +8,22 @@ void busy()
     PAUSE();
   }
 }
+
+#include "tccounter-conflict.h"
+class CounterConflictCallable
+{
+public:
+  CounterConflictCallable() {}
+  ~CounterConflictCallable() {}
+  int do_once(int64_t idx) {
+    UNUSED(idx);
+    counter_.inc(1);
+    return 0;
+  }
+  static TCCounterConflict counter_;
+};
+TCCounterConflict CounterConflictCallable::counter_;
+
 class MallocCallable
 {
 public:
@@ -70,6 +86,23 @@ private:
   pthread_key_t key_ CACHE_ALIGNED;
 };
 
+class GetCpuCallable
+{
+public:
+  GetCpuCallable(){}
+  ~GetCpuCallable(){}
+  int do_once(int64_t idx) {
+    static __thread int64_t run_count = 0;
+    int cpu_id = sched_getcpu();
+    if (run_count == 0)
+    {
+      printf("cpu_id=%d\n", cpu_id);
+      run_count++;
+    }
+    return 0;
+  }
+};
+
 class AddCallable
 {
 public:
@@ -89,17 +122,11 @@ public:
   CasCallable() { value_ = 0; }
   ~CasCallable() {}
   int do_once(int64_t idx) {
-    while(true)
+    int64_t old_value = value_;
+    int64_t new_value = old_value;
+    while(old_value != (new_value = __sync_val_compare_and_swap(&value_, old_value, old_value + 1)))
     {
-      int64_t value = value_;
-      if (__sync_bool_compare_and_swap(&value_, value, value + 1))
-      {
-        break;
-      }
-      else
-      {
-        PAUSE();
-      }
+      old_value = new_value;
     }
     return 0;
   }
@@ -217,10 +244,11 @@ public:
   MCSLockCallable() { }
   ~MCSLockCallable() {}
   int do_once(int64_t idx) {
-    MCSLock::Node node;
-    spinlock_.lock(&node);
+    static __thread MCSLock::Node* node = new MCSLock::Node();
+    node->reset();
+    spinlock_.lock(node);
     busy();
-    spinlock_.unlock(&node);
+    spinlock_.unlock(node);
     return 0;
   }
 private:
@@ -350,10 +378,12 @@ public:
     BaseWorker worker;
     return worker.set_thread_num(n_thread).par_do(callable, time_limit);
   }
+  int counterconflict() { return profile(CounterConflict); }
   int malloc() { return profile(Malloc); }
   int mutex() { return profile(Mutex); }
   int spinlock() { return profile(SpinLock); }
   int tsi() { return profile(TSI); }
+  int getcpu() { return profile(GetCpu); }
   int rdlock() { return profile(RDLock); }
   int add() { return profile(Add); }
   int cas() { return profile(Cas); }
@@ -372,11 +402,13 @@ public:
 #define report_error(err, ...) if (0 != err)fprintf(stderr, __VA_ARGS__);
 const char* _usages = "Usages:\n"
   "\t# Common Environment nthread=1 time_limit=1\n"
+  "\t%1$s counterconflict\n"
   "\t%1$s malloc\n"
   "\t%1$s mutex\n"
   "\t%1$s rdlock\n"
   "\t%1$s spinlock\n"
   "\t%1$s tsi\n"
+  "\t%1$s getcpu\n"
   "\t%1$s add\n"
   "\t%1$s cas\n"
   "\t%1$s swap\n"
@@ -394,8 +426,13 @@ int main(int argc, char** argv)
 {
   int err = 0;
   Perf perf;
+  printf("sizeof(tcounter)=%ld\n", sizeof(TCCounterConflict));
   setlocale(LC_ALL, "");
-  if (-EAGAIN != (err = CmdCall(argc, argv, perf.malloc):-EAGAIN))
+  if (-EAGAIN != (err = CmdCall(argc, argv, perf.counterconflict):-EAGAIN))
+  {
+    report_error(err, "counterconflict()=>%d", err);
+  }
+  else if (-EAGAIN != (err = CmdCall(argc, argv, perf.malloc):-EAGAIN))
   {
     report_error(err, "mutex()=>%d", err);
   }
@@ -410,6 +447,10 @@ int main(int argc, char** argv)
   else if (-EAGAIN != (err = CmdCall(argc, argv, perf.tsi):-EAGAIN))
   {
     report_error(err, "tsi()=>%d", err);
+  }
+  else if (-EAGAIN != (err = CmdCall(argc, argv, perf.getcpu):-EAGAIN))
+  {
+    report_error(err, "getcpu()=>%d", err);
   }
   else if (-EAGAIN != (err = CmdCall(argc, argv, perf.rdlock):-EAGAIN))
   {

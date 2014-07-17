@@ -19,6 +19,7 @@ memcmp.args =
 mem-param.args = 1024 8 1000000
 gcc-opt.args =
 gcc-bin-dir = /home/yuanqi.xhf/gcc/bin/
+cc= $(gcc-bin-dir)gcc
 cxx = $(gcc-bin-dir)g++
 ld = $(gcc-bin-dir)g++
 cflags = -lpthread -lrt -std=c99 -g -O2 -D_GNU_SOURCE

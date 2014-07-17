@@ -13,6 +13,7 @@
 #define UNUSED(v) ((void)(v))
 #define FAA(x, i) __sync_fetch_and_add((x), (i))
 #define CAS(x, ov, nv) __sync_bool_compare_and_swap((x), (ov), (nv))
+#define VCAS(x, ov, nv) __sync_val_compare_and_swap((x), (ov), (nv))
 #define FAS(x, ov) __sync_lock_test_and_set((x), (ov))
 #define AL(x) __atomic_load_n((x), __ATOMIC_SEQ_CST)
 #define AS(x, v) __atomic_store_n((x), (v), __ATOMIC_SEQ_CST)

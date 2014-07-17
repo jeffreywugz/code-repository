@@ -21,8 +21,9 @@ int64_t get_usec()
 }
 
 #define block_size (1<<9)
-#define n_blocks (1<<12)
-char file_block[block_size * n_blocks] __attribute__ ((aligned (block_size))) ;
+#define n_blocks (1)
+char _file_block[block_size * (n_blocks+1)] __attribute__ ((aligned (block_size))) ;
+char* file_block;
 
 int get_disk_param(const char* path, int64_t size)
 {
@@ -43,9 +44,9 @@ int get_disk_param(const char* path, int64_t size)
     perror("open");
   }
   start_time = get_usec();
-  for(int64_t s = 0; 0 == err && s < size; s += sizeof(file_block))
+  for(int64_t s = 0; 0 == err && s < size; s += block_size * n_blocks)
   {
-    if (0 >= write(fd, file_block, sizeof(file_block)))
+    if (0 >= write(fd, file_block, block_size * n_blocks))
     {
       err = errno;
       perror("write");
@@ -159,6 +160,8 @@ int main(int argc, char *argv[])
   int err = 0;
   const char* path = "disk-param.tmp";
   const char* disk = "/dev/sda";
+  file_block = _file_block + 512;
+  printf("file_block=%lx\n", file_block);
   if (argc != 3)
   {
     err = -EINVAL;
