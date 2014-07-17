@@ -105,6 +105,10 @@ public:
     else
     {
       head_.next_ = p->next_;
+      if (p == tail_)
+      {
+        tail_ = p->next_;
+      }
       count_--;
     }
     return p;
@@ -143,7 +147,7 @@ private:
 class RetireList
 {
 public:
-  enum { PREPARE_THRESHOLD = 128, RETIRE_THRESHOLD = 1024 };
+  enum { PREPARE_THRESHOLD = 64, RETIRE_THRESHOLD = 1024 };
   struct ThreadRetireList
   {
     ThreadRetireList() {}
