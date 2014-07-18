@@ -20,7 +20,7 @@ int64_t rand2(int64_t h)
 class TestBtree
 {
 public:
-  TestBtree(): limit_(0), insert_count_(0), get_count_(0) {
+  TestBtree(): limit_(0), insert_count_(0), get_count_(0), delete_count_(0) {
   }
   ~TestBtree() {}
   static int64_t randint() {
@@ -34,10 +34,11 @@ public:
   }
   int test(int64_t n_thread, int64_t limit) {
     pthread_t thread[1024];
-    printf("test: n_thread=%ld limit=%ld\n", n_thread, limit);
+    printf("test: n_thread=%ld limit=%ld MIN_KEY=%lx\n", n_thread, limit, Btree::MIN_KEY);
 
     limit_ = limit;
     pthread_barrier_init(&wait_insert_, NULL, n_thread + 1);
+    pthread_barrier_init(&wait_get_, NULL, n_thread + 1);
 
     {
       int64_t start_ts = get_us();
@@ -51,22 +52,29 @@ public:
 
     {
       int64_t start_ts = get_us();
-      for(int64_t i = 0; i < n_thread; i++) {
-        pthread_join(thread[i], NULL);
-      }
+      pthread_barrier_wait(&wait_get_);
       int64_t end_ts = get_us();
       printf("get: %ld/%ld=%'ld\n", get_count_ * 1000000, end_ts - start_ts, get_count_ * 1000000/(end_ts - start_ts));
     }
 
+    {
+      int64_t start_ts = get_us();
+      for(int64_t i = 0; i < n_thread; i++) {
+        pthread_join(thread[i], NULL);
+      }
+      int64_t end_ts = get_us();
+      printf("del: %ld/%ld=%'ld\n", delete_count_ * 1000000, end_ts - start_ts, delete_count_ * 1000000/(end_ts - start_ts));
+    }
+
     if (is_env_set("dump_btree", "false"))
     {
-      btree_.print();
+      btree_.print(stdout);
     }
     return 0;
   }
   int do_work() {
     int err = BTREE_SUCCESS;
-    const int64_t batch_limit = 64;
+    const int64_t batch_limit = 1;
     int64_t insert_count = 0;
     while(0 == err)
     {
@@ -106,6 +114,31 @@ public:
         }
       }
     }
+
+    int64_t delete_count = 0;
+    pthread_barrier_wait(&wait_get_);
+    while(0 == err)
+    {
+      if ((delete_count = FAA(&delete_count_, batch_limit)) + batch_limit >= limit_)
+      {
+        FAA(&delete_count_, -batch_limit);
+        break;
+      }
+      for(int64_t i = 0; i < batch_limit; i++) {
+        int64_t key = rand2(delete_count + i);
+        int64_t val = 0;
+        // BTREE_LOG(INFO, "before del %lx\n", key);
+        // btree_.print(stdout);
+        while(BTREE_EAGAIN == (err = btree_.del(key, (void*&)val)))
+          ;
+        if (0 != err)
+        {
+          BTREE_LOG(ERROR, "btree.del(%ld)=>%d seq=%ld", key, err, delete_count + i);
+          break;
+        }
+      }
+    }
+
     return 0;
   }
   static void* thread_func(TestBtree* host) {
@@ -116,6 +149,7 @@ private:
   int64_t limit_;
   int64_t insert_count_;
   int64_t get_count_;
+  int64_t delete_count_;
   Btree btree_;
   pthread_barrier_t wait_insert_;
   pthread_barrier_t wait_get_;

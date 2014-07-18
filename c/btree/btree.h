@@ -13,8 +13,9 @@ enum {
   BTREE_DUPLICATE = 2,
   BTREE_NOENT = 3,
   BTREE_EAGAIN = 4,
-  BTREE_OVERFLOW = 5,
-  BTREE_NOT_INIT = 6,
+  BTREE_NOMEM = 5,
+  BTREE_DEPTH_OVERFLOW = 6,
+  BTREE_NOT_INIT = 7,
 };
 #define AL(x) __atomic_load_n((x), __ATOMIC_SEQ_CST)
 #define AS(x, v) __atomic_store_n((x), (v), __ATOMIC_SEQ_CST)
@@ -123,12 +124,13 @@ public:
   {
   public:
     RWLock lock_;
+    bool is_root_;
     bool is_leaf_;
     int32_t count_; 
     key_t keys_[NODE_KEY_COUNT];
     val_t vals_[NODE_KEY_COUNT];
   public:
-    Node(): is_leaf_(false), count_(0) {}
+    Node(): is_root_(false), is_leaf_(false), count_(0) {}
     ~Node() {}
     int try_rdlock() { return lock_.try_rdlock()? BTREE_SUCCESS: BTREE_EAGAIN; }
     int try_wrlock() { return lock_.try_wrlock()? BTREE_SUCCESS: BTREE_EAGAIN; }
@@ -136,7 +138,8 @@ public:
     void wrunlock() { lock_.wrunlock();}
     int try_rd2wrlock() { return lock_.try_rd2wrlock()? BTREE_SUCCESS: BTREE_EAGAIN; }
     bool is_leaf() const { return is_leaf_; }
-    void set_leaf(bool is_leaf) { is_leaf_ = is_leaf; }
+    void set_is_root(bool is_root) { is_root_ = is_root; }
+    void set_is_leaf(bool is_leaf) { is_leaf_ = is_leaf; }
     key_t get_key(int64_t pos) const { return pos < count_? keys_[pos]: NULL; }
     val_t get_val(int64_t pos) const { return pos < count_? vals_[pos]: NULL; }
     void set_key(int64_t pos, key_t key) { if (pos < count_) keys_[pos] = key; }
@@ -149,29 +152,35 @@ public:
         count_++;
       }
     }
-    void print(int depth) {
-      asm volatile ("");
+    int64_t get_count() const { return count_; }
+    bool is_overflow(int64_t delta) {
+      return count_ + delta > NODE_KEY_COUNT;
+    }
+    bool is_underflow(int64_t delta) {
+      return !is_root_ && (count_ + delta < NODE_KEY_COUNT/2);
+    }
+    void print(FILE* file, int depth) {
       if (is_leaf_)
       {
-        printf("L%dK: ", count_);
+        fprintf(file, "L%dK: ", count_);
       }
       else
       {
-        printf("%*s %dK:\n", depth * 4, "|-", count_);
+        fprintf(file, "%*s %dK:\n", depth * 4, "|-", count_);
       }
       for(int64_t i = 0; i < count_; i++) {
         if (!is_leaf_)
         {
-          printf("%*s %lx:%p ", depth * 4, "|-", keys_[i], vals_[i]);
+          fprintf(file, "%*s %lx:%p ", depth * 4, "|-", keys_[i], vals_[i]);
           Node* child = (Node*)vals_[i];
-          child->print(depth + 1);
+          child->print(file, depth + 1);
         }
         else
         {
-          printf("%lx:%p ",keys_[i], vals_[i]);
+          fprintf(file, "%lx:%p ",keys_[i], vals_[i]);
         }
       }
-      printf("\n");
+      fprintf(file, "\n");
     }
     int64_t find_upper_bound(key_t key) { // 比key小的最大元素
       int64_t pos = -1;
@@ -204,30 +213,33 @@ public:
       }
       return pos;
     }
-    bool is_overflow(int64_t delta) {
-      return count_ + delta > NODE_KEY_COUNT;
-    }
   protected:
-    inline void copy_array(Node* dest, int64_t dest_start, int64_t start, int64_t end) {
+    inline void copy(Node* dest, int64_t dest_start, int64_t start, int64_t end) {
       memcpy(dest->keys_ + dest_start, this->keys_ + start, sizeof(key_t) * (end - start));
       memcpy(dest->vals_ + dest_start, this->vals_ + start, sizeof(val_t) * (end - start));
     }
-    inline void do_insert(Node* dest_node, int64_t dest_start, int64_t start, int64_t end, int64_t pos, val_t val_1, key_t key, val_t val_2) {
-      copy_array(dest_node, dest_start, start, pos + 1);
+    inline void copy_and_split_child(Node* dest_node, int64_t dest_start, int64_t start, int64_t end, int64_t pos, val_t val_1, key_t key, val_t val_2) {
+      copy(dest_node, dest_start, start, pos + 1);
       dest_node->vals_[dest_start + pos - start] = val_1;
       dest_node->keys_[dest_start + pos + 1 - start] = key;
       dest_node->vals_[dest_start + pos + 1 - start] = val_2;
-      copy_array(dest_node, dest_start + (pos + 2) - start, pos + 1, end);
+      copy(dest_node, dest_start + (pos + 2) - start, pos + 1, end);
+    }
+    inline void copy_and_merge_child(Node* dest_node, int64_t dest_start, int64_t start, int64_t end, int64_t pos, key_t key, val_t val) {
+      copy(dest_node, dest_start, start, pos);
+      dest_node->keys_[dest_start + pos - start] = key;
+      dest_node->vals_[dest_start + pos - start] = val;
+      copy(dest_node, dest_start + pos + 1 - start, pos + 2, end);
     }
   public:
-    int normal_insert(Node* new_node, int64_t pos, val_t val_1, key_t key, val_t val_2) {
+    int split_child_no_overflow(Node* new_node, int64_t pos, val_t val_1, key_t key, val_t val_2) {
       int err = BTREE_SUCCESS;
       new_node->is_leaf_ = is_leaf_;
       new_node->count_ = count_ + 1;
-      do_insert(new_node, 0, 0, count_, pos, val_1, key, val_2);
+      copy_and_split_child(new_node, 0, 0, count_, pos, val_1, key, val_2);
       return err;
     }
-    int split_insert(Node* new_node_1, Node* new_node_2, int64_t pos, val_t val_1, key_t key, val_t val_2) {
+    int split_child_cause_recursive_split(Node* new_node_1, Node* new_node_2, int64_t pos, val_t val_1, key_t key, val_t val_2) {
       int err = BTREE_SUCCESS;
       const int64_t half_limit = NODE_KEY_COUNT/2;
       new_node_1->is_leaf_ = is_leaf_;
@@ -237,16 +249,90 @@ public:
       {
         new_node_1->count_ = half_limit + 1;
         new_node_2->count_ = count_ - half_limit;
-        do_insert(new_node_1, 0, 0, half_limit, pos, val_1, key, val_2);
-        copy_array(new_node_2, 0, half_limit, count_);
+        copy_and_split_child(new_node_1, 0, 0, half_limit, pos, val_1, key, val_2);
+        copy(new_node_2, 0, half_limit, count_);
       }
       else
       {
         new_node_1->count_ = half_limit;
         new_node_2->count_ = count_ + 1 - half_limit;
-        copy_array(new_node_1, 0, 0, half_limit);
-        do_insert(new_node_2, 0, half_limit, count_, pos, val_1, key, val_2);
+        copy(new_node_1, 0, 0, half_limit);
+        copy_and_split_child(new_node_2, 0, half_limit, count_, pos, val_1, key, val_2);
       }
+      return err;
+    }
+    int64_t get_merge_pos(int64_t pos) {
+      return pos > 0? pos - 1: pos;
+    }
+    int64_t get_brother_pos(int64_t pos) {
+      return pos > 0? pos - 1: pos + 1;
+    }
+    int replace_child_and_brother(Node* new_node, int64_t pos, Node* child, Node* brother)
+    {
+      int err = BTREE_SUCCESS;
+      new_node->is_leaf_ = is_leaf_;
+      new_node->count_ = count_;
+      copy(new_node, 0, 0, count_);
+      if (pos > 0)
+      {
+        new_node->keys_[pos] = child->get_key(0);
+      }
+      else
+      {
+        new_node->keys_[pos + 1] = brother->get_key(0);
+      }
+      new_node->vals_[pos] = child;
+      new_node->vals_[get_brother_pos(pos)] = brother;
+      return err;
+    }
+    int merge_child_no_underflow(Node* new_node, int64_t pos, key_t key, val_t val)
+    {
+      int err = BTREE_SUCCESS;
+      new_node->is_leaf_ = is_leaf_;
+      new_node->count_ = count_ - 1;
+      copy_and_merge_child(new_node, 0, 0, count_, get_merge_pos(pos), key, val);
+      return err;
+    }
+    int merge_child_cause_recursive_merge_with_right_brother(Node* new_node, Node* brother, int64_t pos, key_t key, val_t val)
+    {
+      int err = BTREE_SUCCESS;
+      new_node->is_leaf_ = is_leaf_;
+      new_node->count_ = count_ + brother->get_count() - 1;
+      copy_and_merge_child(new_node, 0, 0, count_, get_merge_pos(pos), key, val);
+      brother->copy(new_node, count_ - 1, 0, brother->count_);
+      return err;
+    }
+    int merge_child_cause_recursive_merge_with_left_brother(Node* new_node, Node* brother, int64_t pos, key_t key, val_t val)
+    {
+      int err = BTREE_SUCCESS;
+      new_node->is_leaf_ = is_leaf_;
+      new_node->count_ = count_ + brother->get_count() - 1;
+      brother->copy(new_node, 0, 0, brother->count_);
+      copy_and_merge_child(new_node, brother->count_, 0, count_, get_merge_pos(pos), key, val);
+      return err;
+    }
+    int merge_child_cause_rebalance_with_right_brother(Node* new_node_1, Node* new_node_2, Node* brother, int64_t pos, key_t key, val_t val)
+    {
+      int err = BTREE_SUCCESS;
+      new_node_1->is_leaf_ = is_leaf_;
+      new_node_1->count_ = (count_ + brother->count_ - 1)/2;
+      new_node_2->is_leaf_ = is_leaf_;
+      new_node_2->count_ = (count_ + brother->count_ - 1) - new_node_1->count_;
+      copy_and_merge_child(new_node_1, 0, 0, count_, get_merge_pos(pos), key, val);
+      brother->copy(new_node_1, count_ - 1, 0, new_node_1->count_ - count_ + 1);
+      brother->copy(new_node_2, 0, new_node_1->count_ - count_ + 1, brother->count_);
+      return err;
+    }
+    int merge_child_cause_rebalance_with_left_brother(Node* new_node_1, Node* new_node_2, Node* brother, int64_t pos, key_t key, val_t val)
+    {
+      int err = BTREE_SUCCESS;
+      new_node_1->is_leaf_ = is_leaf_;
+      new_node_1->count_ = (count_ + brother->count_ - 1)/2;
+      new_node_2->is_leaf_ = is_leaf_;
+      new_node_2->count_ = (count_ + brother->count_ - 1) - new_node_1->count_;
+      brother->copy(new_node_1, 0, 0, new_node_1->count_);
+      brother->copy(new_node_2, 0, new_node_1->count_, brother->count_);
+      copy_and_merge_child(new_node_2, brother->count_ - new_node_1->count_, 0, count_, get_merge_pos(pos), key, val);
       return err;
     }
   };
@@ -261,8 +347,10 @@ public:
       int64_t pos_;
     };
     Path(): depth_(0) {
-      root1_.set_leaf(false);
-      root2_.set_leaf(false);
+      root1_.set_is_root(true);
+      root1_.set_is_leaf(false);
+      root2_.set_is_root(true);
+      root2_.set_is_leaf(false);
       root1_.append_child(MIN_KEY, NULL);
       root2_.append_child(MIN_KEY, NULL);
       push(&root1_, 0);
@@ -279,7 +367,7 @@ public:
       int err = BTREE_SUCCESS;
       if (depth_ >= CAPACITY)
       {
-        err = BTREE_OVERFLOW;
+        err = BTREE_DEPTH_OVERFLOW;
       }
       else
       {
@@ -293,13 +381,26 @@ public:
       int err = BTREE_SUCCESS;
       if (depth_ <= 0)
       {
-        err = BTREE_OVERFLOW;
+        err = BTREE_DEPTH_OVERFLOW;
       }
       else
       {
         depth_--;
         node = path_[depth_].node_;
         pos = path_[depth_].pos_;
+      }
+      return err;
+    }
+    int top(Node*& node, int64_t& pos) {
+      int err = BTREE_SUCCESS;
+      if (depth_ <= 0)
+      {
+        err = BTREE_DEPTH_OVERFLOW;
+      }
+      else
+      {
+        node = path_[depth_-1].node_;
+        pos = path_[depth_-1].pos_;
       }
       return err;
     }
@@ -433,12 +534,6 @@ public:
         {
           err = BTREE_ERROR;
           BTREE_LOG(ERROR, "could not find upper_bound: root=%p key=%lx", root, key);
-          root->print(0);
-          while(BTREE_SUCCESS == (err = path_.pop(root, pos)))
-          {
-            BTREE_LOG(EEROR, "root=%p pos=%ld", root, pos);
-          }
-          root->print(0);
         }
         else if (BTREE_SUCCESS != (err = path_.push(root, pos)))
         {}
@@ -453,17 +548,16 @@ public:
       }
       return err;
     }
-    int insert_and_update_upward(key_t key, val_t val, bool overwrite, Node*& new_root)
+    int insert_and_split_upward(key_t key, val_t val, bool overwrite, Node*& new_root)
     {
       int err = BTREE_SUCCESS;
       Node* old_node = NULL;
       int64_t pos = -1;
       Node* new_node_1 = NULL;
       Node* new_node_2 = NULL;
-      key_t split_key;
       if (BTREE_SUCCESS != (err = path_.pop(old_node, pos)))
       {}
-      else if (BTREE_SUCCESS != (err = insert_to_leaf(old_node, overwrite, pos, key, val, new_node_1, new_node_2, split_key)))
+      else if (BTREE_SUCCESS != (err = insert_to_leaf(old_node, overwrite, pos, key, val, new_node_1, new_node_2)))
       {}
       while(BTREE_SUCCESS == err)
       {
@@ -475,14 +569,14 @@ public:
         {
           if (BTREE_SUCCESS != (err = path_.pop(old_node, pos)))
           {}
-          else if (BTREE_SUCCESS != (err = insert(old_node, pos, new_node_1, split_key, new_node_2, new_node_1, new_node_2, split_key)))
+          else if (BTREE_SUCCESS != (err = split_child(old_node, pos, new_node_1, new_node_2->get_key(0), new_node_2, new_node_1, new_node_2)))
           {}
         }
         else
         {
           if (BTREE_SUCCESS != (err = path_.pop(old_node, pos)))
           {}
-          else if (BTREE_SUCCESS != (err = replace(old_node, pos, new_node_1)))
+          else if (BTREE_SUCCESS != (err = replace_child(old_node, pos, new_node_1)))
           {}
           else
           {
@@ -496,58 +590,120 @@ public:
       }
       return err;
     }
-  private:
-    int replace(Node* old_node, int64_t pos, val_t val) {
+
+    int delete_and_merge_upward(key_t key, val_t& val, Node*& new_root)
+    {
       int err = BTREE_SUCCESS;
-      bool locked = true;
+      Node* old_node = NULL;
+      int64_t pos = -1;
+      Node* new_node_1 = NULL;
+      Node* new_node_2 = NULL;
+      if (BTREE_SUCCESS != (err = path_.pop(old_node, pos)))
+      {}
+      else if (BTREE_SUCCESS != (err = delete_from_leaf(old_node, pos, key, val, new_node_1, new_node_2)))
+      {}
+      while(BTREE_SUCCESS == err)
+      {
+        if (old_node == new_node_1)
+        {
+          break;
+        }
+        else if (NULL == new_node_2)
+        {
+          if (BTREE_SUCCESS != (err = path_.pop(old_node, pos)))
+          {}
+          else if (BTREE_SUCCESS != (err = replace_child(old_node, pos, new_node_1)))
+          {}
+          else
+          {
+            new_node_1 = old_node;
+          }
+        }
+        else if (NULL == new_node_1)
+        {
+          if (BTREE_SUCCESS != (err = path_.pop(old_node, pos)))
+          {}
+          else if (BTREE_SUCCESS != (err = merge_child(old_node, pos, new_node_2->get_key(0), new_node_2, new_node_1, new_node_2)))
+          {}
+        }
+        else
+        {
+          if (BTREE_SUCCESS != (err = path_.pop(old_node, pos)))
+          {}
+          else if (BTREE_SUCCESS != (err = replace_child_and_brother(old_node, pos, new_node_1, new_node_2, new_node_1)))
+          {}
+          else
+          {
+            new_node_2 = NULL;
+          }
+        }
+      }
+      if (BTREE_SUCCESS == err)
+      {
+        if (NULL != (new_root = path_.get_new_root()))
+        {
+          if (new_root->get_count() == 1 && !new_root->is_leaf())
+          {
+            retire_list_.push(new_root);
+            new_root = (Node*)new_root->get_val(0);
+          }
+        }
+      }
+      return err;
+    }
+  private:
+    int try_wrlock(Node* node)
+    {
+      int err = BTREE_SUCCESS;
+      if (0 != node->try_wrlock())
+      {
+        err = BTREE_EAGAIN;
+      }
+      else if (!path_.is_extra_root(node))
+      {
+        retire_list_.push(node);
+      }
+      return err;
+    }
+    int replace_child(Node* old_node, int64_t pos, val_t val) {
+      int err = BTREE_SUCCESS;
       if (0 != old_node->try_rdlock())
       {
-        locked = false;
         err = BTREE_EAGAIN;
       }
       else
       {
         old_node->set_val(pos, val);
-      }
-      if (locked)
-      {
         old_node->rdunlock();
       }
       return err;
     }
-    int do_insert(Node* old_node, int64_t pos, val_t val_1, key_t new_key, val_t val_2, Node*& new_node_1, Node*& new_node_2, key_t& split_key) {
+    int replace_child_and_brother(Node* old_node, int64_t pos, Node* child, Node* brother, Node*& new_node) {
       int err = BTREE_SUCCESS;
-      if (old_node->is_overflow(1))
+      if (BTREE_SUCCESS != (err = try_wrlock(old_node)))
+      {}
+      else if (NULL == (new_node = alloc_node()))
       {
-        new_node_1 = alloc_node();
-        new_node_2 = alloc_node();
-        if (BTREE_SUCCESS != (err = old_node->split_insert(new_node_1, new_node_2, pos, val_1, new_key, val_2)))
-        {}
-        else
-        {
-          split_key = new_node_2->get_key(0);
-        }
+        err = BTREE_NOMEM;
       }
       else
       {
-        new_node_1 = alloc_node();
-        new_node_2 = NULL;
-        err = old_node->normal_insert(new_node_1, pos, val_1, new_key, val_2);
+        err = old_node->replace_child_and_brother(new_node, pos, child, brother);
       }
       return err;
     }
-    int insert_to_leaf(Node* old_node, bool overwrite, int64_t pos, key_t key, val_t val, Node*& new_node_1, Node*& new_node_2, key_t& split_key) {
+    int insert_to_leaf(Node* old_node, bool overwrite, int64_t pos, key_t key, val_t val, Node*& new_node_1, Node*& new_node_2) {
       int err = BTREE_SUCCESS;
       key_t prev_key = old_node->get_key(pos);
       if (prev_key != key)
       {
-        err = insert(old_node, pos, old_node->get_val(pos), key, val, new_node_1, new_node_2, split_key);
+        err = split_child(old_node, pos, old_node->get_val(pos), key, val, new_node_1, new_node_2);
       }
       else if (overwrite)
       {
         new_node_1 = old_node;
         new_node_2 = NULL;
-        err = replace(old_node, pos, val);
+        err = replace_child(old_node, pos, val);
       }
       else
       {
@@ -555,42 +711,137 @@ public:
       }
       return err;
     }
-    int insert(Node* old_node, int64_t pos, val_t val_1, key_t new_key, val_t val_2, Node*& new_node_1, Node*& new_node_2, key_t& split_key) {
+    int split_child(Node* old_node, int64_t pos, val_t val_1, key_t new_key, val_t val_2, Node*& new_node_1, Node*& new_node_2) {
       int err = BTREE_SUCCESS;
-      bool locked = true;
-      if (0 != old_node->try_wrlock())
+      if (BTREE_SUCCESS != (err = try_wrlock(old_node)))
+      {}
+      else if (old_node->is_overflow(1))
       {
-        locked = false;
-        err = BTREE_EAGAIN;
+        if (NULL == (new_node_1 = alloc_node()) || NULL == (new_node_2 = alloc_node()))
+        {
+          err = BTREE_NOMEM;
+        }
+        else
+        {
+          err = old_node->split_child_cause_recursive_split(new_node_1, new_node_2, pos, val_1, new_key, val_2);
+        }
       }
-      else if (!path_.is_extra_root(old_node))
+      else
       {
-        retire_list_.push(old_node);
+        new_node_2 = NULL;
+        if (NULL == (new_node_1 = alloc_node()))
+        {
+          err = BTREE_NOMEM;
+        }
+        else
+        {
+          err = old_node->split_child_no_overflow(new_node_1, pos, val_1, new_key, val_2);
+        }
       }
-      if (locked)
+      return err;
+    }
+    
+    int delete_from_leaf(Node* old_node, int64_t pos, key_t key, val_t& val, Node*& new_node_1, Node*& new_node_2)
+    {
+      int err = BTREE_SUCCESS;
+      key_t prev_key = old_node->get_key(pos);
+      if (prev_key != key)
       {
-        err = do_insert(old_node, pos, val_1, new_key, val_2, new_node_1, new_node_2, split_key);
+        err = BTREE_NOENT;
+      }
+      else
+      {
+        val = old_node->get_val(pos);
+        int64_t brother_pos = old_node->get_brother_pos(pos);
+        err = merge_child(old_node, pos, old_node->get_key(brother_pos), old_node->get_val(brother_pos), new_node_1, new_node_2);
+      }
+      return err;
+    }
+    int merge_child(Node* old_node, int64_t pos, key_t key, val_t val, Node*& new_node_1, Node*& new_node_2)
+    {
+      int err = BTREE_SUCCESS;
+      Node* parent_node = NULL;
+      Node* brother_node = NULL;
+      int64_t parent_pos = -1;
+      if (BTREE_SUCCESS != (err = try_wrlock(old_node)))
+      {}
+      else if (!old_node->is_underflow(-1))
+      {
+        new_node_2 = NULL;
+        if (NULL == (new_node_1 = alloc_node()))
+        {
+          err = BTREE_NOMEM;
+        }
+        else
+        {
+          err = old_node->merge_child_no_underflow(new_node_1, pos, key, val);
+        }
+      }
+      else if (BTREE_SUCCESS != (err = path_.top(parent_node, parent_pos)))
+      {}
+      else if (NULL == (brother_node = (Node*)parent_node->get_val(parent_node->get_brother_pos(parent_pos))))
+      {
+        err = BTREE_ERROR;
+      }
+      else if (BTREE_SUCCESS != (err = try_wrlock(brother_node)))
+      {}
+      else if (!brother_node->is_overflow(old_node->get_count()))
+      {
+        new_node_1 = NULL;
+        if (NULL == (new_node_2 = alloc_node()))
+        {
+          err = BTREE_NOMEM;
+        }
+        else if (parent_pos > 0)
+        {
+          err = old_node->merge_child_cause_recursive_merge_with_left_brother(new_node_2, brother_node, pos, key, val);
+        }
+        else
+        {
+          err = old_node->merge_child_cause_recursive_merge_with_right_brother(new_node_2, brother_node, pos, key, val);
+        }
+      }
+      else
+      {
+        if (NULL == (new_node_1 = alloc_node()) || NULL == (new_node_2 = alloc_node()))
+        {
+          err = BTREE_NOMEM;
+        }
+        else if (parent_pos > 0)
+        {
+          err = old_node->merge_child_cause_rebalance_with_left_brother(new_node_2, new_node_1, brother_node, pos, key, val);
+        }
+        else
+        {
+          err = old_node->merge_child_cause_rebalance_with_right_brother(new_node_1, new_node_2, brother_node, pos, key, val);
+        }
       }
       return err;
     }
   };
 
-  Btree(): allocator_(sizeof(Node)), root_(NULL) {
+  Btree(): allocator_(sizeof(Node)), root_(NULL)
+  {
     if (NULL != (root_ = (Node*)allocator_.alloc()))
     {
-      root_->set_leaf(true);
+      root_->set_is_root(true);
+      root_->set_is_leaf(true);
       root_->append_child(MIN_KEY, NULL);
     }
   }
   ~Btree(){}
-  void print() {
-    printf("--------------------------\n");
-    printf("|root=%p\n", root_);
-    root_->print(0);
+  void print(FILE* file)
+  {
+    fprintf(file, "--------------------------\n");
+    fprintf(file, "|root=%p\n", root_);
+    root_->print(file, 0);
   }
+
   RetireList& get_retire_list() { return retire_list_; }
   BaseNodeAllocator& get_allocator() { return allocator_; }
-  int set(key_t key, val_t val, bool overwrite = true) {
+
+  int set(key_t key, val_t val, bool overwrite = true)
+  {
     int err = BTREE_SUCCESS;
     Node* root = NULL;
     Node* new_root = NULL;
@@ -604,24 +855,63 @@ public:
     {
       BTREE_LOG(ERROR, "path.search(%p, %lx)=>%d", root, key, err);
     }
-    else if (BTREE_SUCCESS != (err = handle.insert_and_update_upward(key, val, overwrite, new_root)))
+    else if (BTREE_SUCCESS != (err = handle.insert_and_split_upward(key, val, overwrite, new_root)))
     {
       if (BTREE_DUPLICATE != err && BTREE_EAGAIN != err)
       {
         BTREE_LOG(ERROR, "insert_upward(%p, %lx)=>%d", val, key, err);
       }
     }
-    else if (NULL == new_root)
-    {}
-    else if (!CAS(&root_, root, new_root))
+    else if (NULL != new_root)
     {
-      err = BTREE_EAGAIN;
+      new_root->set_is_root(true);
+      if (!CAS(&root_, root, new_root))
+      {
+        err = BTREE_EAGAIN;
+      }
     }
     handle.release_ref();
     handle.retire(err);
     return err;
   }
-  int get(key_t key, val_t& val) {
+
+  int del(key_t key, val_t& val)
+  {
+    int err = BTREE_SUCCESS;
+    Node* root = NULL;
+    Node* new_root = NULL;
+    WriteHandle handle(*this);
+    handle.acquire_ref();
+    if (NULL == (root = AL(&root_)))
+    {
+      err = BTREE_NOT_INIT;
+    }
+    else if (BTREE_SUCCESS != (err = handle.find_path(root, key)))
+    {
+      BTREE_LOG(ERROR, "path.search(%p, %lx)=>%d", root, key, err);
+    }
+    else if (BTREE_SUCCESS != (err = handle.delete_and_merge_upward(key, val, new_root)))
+    {
+      if (BTREE_NOENT != err && BTREE_EAGAIN != err)
+      {
+        BTREE_LOG(ERROR, "delete_upward(%p, %lx)=>%d", val, key, err);
+      }
+    }
+    else if (NULL != new_root)
+    {
+      new_root->set_is_root(true);
+      if (!CAS(&root_, root, new_root))
+      {
+        err = BTREE_EAGAIN;
+      }
+    }
+    handle.release_ref();
+    handle.retire(err);
+    return err;
+  }
+
+  int get(key_t key, val_t& val)
+  {
     int err = BTREE_SUCCESS;
     Node* root = NULL;
     ReadHandle handle(*this);
